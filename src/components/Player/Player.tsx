@@ -278,7 +278,7 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
           dock={dock}
         />
       )}
-      {panel === 'drums' && drums.analysis && <DrumSheet analysis={drums.analysis} position={shown} onSeek={seek} onClose={closePanel} dock={dock} />}
+      {panel === 'drums' && drums.analysis && <DrumSheet title={song.name} analysis={drums.analysis} position={shown} onSeek={seek} onClose={closePanel} dock={dock} />}
       {panel === 'menu' && (
         <Sheet title={song.name} onClose={closePanel}>
           {install && (

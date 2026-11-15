@@ -571,6 +571,29 @@ test('the drum sheet shows this bar and the next, as a grid or as notation', asy
   await expect(sheet.locator('svg.notation')).toHaveCount(2);
 });
 
+test('the drum sheet exports the complete score with the song title to PDF', async ({ page }) => {
+  const drumPart = page.getByRole('button', { name: /^Drum part/ });
+  await expect(drumPart).toBeEnabled({ timeout: 45_000 });
+  await drumPart.click();
+  await page.evaluate(() => {
+    (window as Window & { printCalls?: number }).printCalls = 0;
+    window.print = () => {
+      (window as Window & { printCalls?: number }).printCalls! += 1;
+    };
+  });
+
+  const sheet = page.getByRole('dialog', { name: 'Drums' });
+  await sheet.getByRole('button', { name: 'Export PDF' }).click();
+  await expect(page.locator('.drum-score-print__header h1')).toHaveText(SONG_NAME);
+  await expect(page.locator('.drum-score-print__header')).toContainText('Drum set');
+  await expect(page.locator('.drum-score-print__system').first()).toHaveAttribute('aria-label', /^Drum score bars 1 to \d+$/);
+  expect(await page.locator('.drum-score-print__system').count()).toBeGreaterThan(1);
+  await expect.poll(() => page.evaluate(() => (window as Window & { printCalls?: number }).printCalls)).toBe(1);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#root')).toBeHidden();
+  await expect(page.locator('.drum-score-print')).toBeVisible();
+});
+
 test('the song map lists grooves and fills, and jumps to them', async ({ page }) => {
   await expect.poll(() => page.locator('.drums__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
   await page.getByRole('button', { name: /^Drum part/ }).click();

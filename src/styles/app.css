@@ -1326,6 +1326,139 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* Full-song drum score: hidden in the app, shown only in the browser's print/PDF view. */
+.drum-export {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.drum-score-print {
+  display: none;
+}
+
+@page {
+  size: letter portrait;
+  margin: 12mm;
+}
+
+@media print {
+  #root {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .drum-score-print,
+  .drum-score-print * {
+    visibility: visible !important;
+  }
+
+  .drum-score-print {
+    display: block !important;
+    position: static;
+    width: 100%;
+    color: #111;
+    background: #fff;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+
+  .drum-score-print__header {
+    margin: 0 0 8mm;
+    text-align: center;
+  }
+
+  .drum-score-print__header h1 {
+    margin: 0;
+    font-size: 24pt;
+    font-weight: 600;
+  }
+
+  .drum-score-print__header p {
+    margin: 2mm 0 0;
+    font-size: 10pt;
+  }
+
+  .drum-score-print__system {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0 0 6mm;
+    overflow: visible;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .drum-score-print__staff,
+  .drum-score-print__barline {
+    fill: none;
+    stroke: #222;
+    stroke-width: 1;
+  }
+
+  .drum-score-print__barline {
+    stroke-width: 1.4;
+  }
+
+  .drum-score-print__clef,
+  .drum-score-print__note {
+    fill: #111;
+    stroke: none;
+  }
+
+  .drum-score-print__head {
+    fill: none;
+    stroke: #111;
+    stroke-width: 1.5;
+  }
+
+  .drum-score-print__head .drum-score-print__note {
+    fill: #111;
+  }
+
+  .drum-score-print__open,
+  .drum-score-print__ghost,
+  .drum-score-print__stem,
+  .drum-score-print__flag {
+    fill: none;
+    stroke: #111;
+    stroke-width: 1.5;
+  }
+
+  .drum-score-print__ghost {
+    stroke-width: 1;
+  }
+
+  .drum-score-print__instrument,
+  .drum-score-print__meter,
+  .drum-score-print__number,
+  .drum-score-print__tuplet {
+    fill: #111;
+    stroke: none;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+
+  .drum-score-print__instrument {
+    font-size: 11px;
+  }
+
+  .drum-score-print__meter {
+    font-size: 14px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+
+  .drum-score-print__number {
+    font-size: 11px;
+  }
+
+  .drum-score-print__tuplet {
+    font-size: 9px;
+    text-anchor: middle;
+  }
+}
+
 /* chord sheet: now/next (pinned), the chart, the song map, then the tucked-away chord shapes */
 .chord-head {
   position: sticky;

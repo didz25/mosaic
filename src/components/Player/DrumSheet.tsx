@@ -1,7 +1,9 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { CYMBALS, LANES, isGhost, roadMap, usedLanes, type DrumAnalysis, type DrumBar } from '../../audio/drums';
 import { RepeatBarIcon } from '../icons';
 import { DrumNotation } from './DrumNotation';
+import { DrumScore } from './DrumScore';
 import { MiniPattern } from './DrumStrip';
 import { Sheet } from './Sheet';
 import { segmentAt, useStarts } from './timeline';
@@ -30,6 +32,7 @@ function writeView(value: View) {
 }
 
 interface Props {
+  title: string;
   analysis: DrumAnalysis;
   position: number;
   onSeek: (time: number) => void;
@@ -51,7 +54,7 @@ function stepAt(bar: DrumBar, t: number, division: number): number {
  * Reading view of the drum part: the bar playing now (with a moving step cursor) and the one coming
  * next, as a step grid or as notation, then the song map (grooves ×bars, fills) to jump around.
  */
-export function DrumSheet({ analysis, position, onSeek, onClose, dock }: Props) {
+export function DrumSheet({ title, analysis, position, onSeek, onClose, dock }: Props) {
   const [view, setView] = useState(readView);
   const { bars, meter, division, swing } = analysis;
   const starts = useStarts(bars);
@@ -70,49 +73,55 @@ export function DrumSheet({ analysis, position, onSeek, onClose, dock }: Props) 
   };
 
   return (
-    <Sheet title="Drums" onClose={onClose} dock={dock}>
-      <div className="chord-now">
-        <span className="chord-now__name">{now ? `Bar ${nowIndex + 1}` : 'No drums'}</span>
-        <span className="chord-now__next drum-feel">
-          {meter}/4 · {swing ? 'Shuffle' : 'Straight'}
-        </span>
-      </div>
-      <div className="segmented" role="group" aria-label="View">
-        {(['grid', 'notation'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={`segmented__btn ${view === value ? 'segmented__btn--on' : ''}`}
-            aria-pressed={view === value}
-            onClick={() => choose(value)}
-          >
-            {value === 'grid' ? 'Grid' : 'Notation'}
-          </button>
-        ))}
-      </div>
-
-      {now && (
-        <div className="drum-read">
-          <ReadBar bar={now} caption={playing ? 'Now' : 'Coming up'} lanes={lanes} division={division} view={view} step={playing ? stepAt(now, position, division) : -1} />
-          {next && next.kind !== 'rest' && <ReadBar bar={next} caption="Next" lanes={lanes} division={division} view={view} step={-1} />}
-          {next?.kind === 'rest' && <p className="drum-read__rest">Next: drums stop</p>}
+    <>
+      <Sheet title="Drums" onClose={onClose} dock={dock}>
+        <div className="chord-now">
+          <span className="chord-now__name">{now ? `Bar ${nowIndex + 1}` : 'No drums'}</span>
+          <span className="chord-now__next drum-feel">
+            {meter}/4 · {swing ? 'Shuffle' : 'Straight'}
+          </span>
         </div>
-      )}
-
-      <h4 className="drum-map__title">Song map</h4>
-      <div className="drum-map">
-        {sections.map((s) => {
-          const current = i >= s.first && i < s.first + s.count;
-          return (
-            <button key={s.first} type="button" className={`drum-map__item drum-map__item--${s.kind} ${current ? 'is-now' : ''}`} onClick={() => onSeek(s.start)}>
-              <span className="drum-map__bars">{s.count > 1 ? `${s.first + 1}–${s.first + s.count}` : s.first + 1}</span>
-              {s.kind === 'rest' ? <span className="drum-map__rest">No drums</span> : <MiniPattern steps={s.steps} beats={s.steps[0].length / division} />}
-              <span className="drum-map__count">{s.kind === 'fill' ? 'Fill' : `×${s.count}`}</span>
+        <div className="segmented" role="group" aria-label="View">
+          {(['grid', 'notation'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`segmented__btn ${view === value ? 'segmented__btn--on' : ''}`}
+              aria-pressed={view === value}
+              onClick={() => choose(value)}
+            >
+              {value === 'grid' ? 'Grid' : 'Notation'}
             </button>
-          );
-        })}
-      </div>
-    </Sheet>
+          ))}
+        </div>
+        <button type="button" className="pill-button pill-button--outline drum-export" onClick={() => window.print()}>
+          Export PDF
+        </button>
+
+        {now && (
+          <div className="drum-read">
+            <ReadBar bar={now} caption={playing ? 'Now' : 'Coming up'} lanes={lanes} division={division} view={view} step={playing ? stepAt(now, position, division) : -1} />
+            {next && next.kind !== 'rest' && <ReadBar bar={next} caption="Next" lanes={lanes} division={division} view={view} step={-1} />}
+            {next?.kind === 'rest' && <p className="drum-read__rest">Next: drums stop</p>}
+          </div>
+        )}
+
+        <h4 className="drum-map__title">Song map</h4>
+        <div className="drum-map">
+          {sections.map((s) => {
+            const current = i >= s.first && i < s.first + s.count;
+            return (
+              <button key={s.first} type="button" className={`drum-map__item drum-map__item--${s.kind} ${current ? 'is-now' : ''}`} onClick={() => onSeek(s.start)}>
+                <span className="drum-map__bars">{s.count > 1 ? `${s.first + 1}–${s.first + s.count}` : s.first + 1}</span>
+                {s.kind === 'rest' ? <span className="drum-map__rest">No drums</span> : <MiniPattern steps={s.steps} beats={s.steps[0].length / division} />}
+                <span className="drum-map__count">{s.kind === 'fill' ? 'Fill' : `×${s.count}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Sheet>
+      {createPortal(<DrumScore title={title} analysis={analysis} />, document.body)}
+    </>
   );
 }
 
