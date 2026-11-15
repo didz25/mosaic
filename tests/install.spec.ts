@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openSong } from './helpers';
 
 const card = (page: import('@playwright/test').Page) => page.getByRole('region', { name: 'Install Mosaic' });
 
@@ -31,6 +32,16 @@ test('the install button opens the browser install dialog, then the card goes aw
   expect(await page.evaluate(() => (window as unknown as { __prompted: number }).__prompted)).toBe(1);
 });
 
+test('the player menu opens the browser install dialog', async ({ page }) => {
+  await page.goto('./?song=tujhe-kitna-chahein-aur-hum');
+  await expect(page.getByRole('button', { name: 'More options' })).toBeVisible();
+  await offerInstall(page, 'dismissed');
+  await page.getByRole('button', { name: 'More options' }).click();
+  await page.getByRole('button', { name: 'Install app' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __prompted: number }).__prompted)).toBe(1);
+});
+
 test('dismissing the card is remembered', async ({ page }) => {
   await page.goto('./');
   await offerInstall(page, 'dismissed');
@@ -54,6 +65,11 @@ test.describe('iPhone', () => {
     await expect(card(page)).toContainText('Add to Home Screen');
     await expect(card(page).getByRole('button', { name: 'Install' })).toHaveCount(0);
     await page.screenshot({ path: 'test-results/install-card-ios.png' });
+
+    await openSong(page);
+    await page.getByRole('button', { name: 'More options' }).click();
+    await page.getByRole('button', { name: 'Add to Home Screen' }).click();
+    await expect(page.getByRole('dialog', { name: 'Install Mosaic' })).toContainText('Add to Home Screen');
   });
 
   test('says nothing once it runs from the home screen', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { detectBeats } from '../../audio/bpm';
 import { beatGrid } from '../../audio/chords';
 import { Engine } from '../../audio/Engine';
@@ -10,6 +10,7 @@ import { toast } from '../../lib/toast';
 import type { SongSource } from '../../lib/types';
 import { barsFromBeats } from '../../lib/chordChart';
 import { keyName } from '../../lib/chords';
+import { installMode, onInstallChange, promptInstall } from '../../lib/install';
 import { Footer } from '../Footer';
 import { ChevronDownIcon, MoreVerticalIcon, ShareIcon } from '../icons';
 import { ChordSheet } from './ChordSheet';
@@ -27,7 +28,7 @@ import { Transport } from './Transport';
 import { useChords, type ChordsState } from './useChords';
 import { useDrums } from './useDrums';
 
-type Panel = null | 'metronome' | 'pitch' | 'menu' | 'chords' | 'drums' | { stem: number };
+type Panel = null | 'metronome' | 'pitch' | 'menu' | 'install' | 'chords' | 'drums' | { stem: number };
 
 interface CachedBeats {
   bpm: number;
@@ -144,6 +145,7 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
   const state = useEngineState(engine);
   const position = usePosition(engine, state.playing);
   const [panel, setPanel] = useState<Panel>(null);
+  const install = useSyncExternalStore(onInstallChange, installMode);
   const [showWaves, setShowWaves] = useState(readShowWaves);
   const [showChords, setShowChords] = useState(readShowChords);
   const [showDrums, setShowDrums] = useState(readShowDrums);
@@ -279,6 +281,20 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
       {panel === 'drums' && drums.analysis && <DrumSheet analysis={drums.analysis} position={shown} onSeek={seek} onClose={closePanel} dock={dock} />}
       {panel === 'menu' && (
         <Sheet title={song.name} onClose={closePanel}>
+          {install && (
+            <MenuItem
+              onClick={() => {
+                if (install === 'prompt') {
+                  closePanel();
+                  void promptInstall();
+                } else {
+                  setPanel('install');
+                }
+              }}
+            >
+              {install === 'prompt' ? 'Install app' : 'Add to Home Screen'}
+            </MenuItem>
+          )}
           {song.shareable && (
             <MenuItem
               onClick={() => {
@@ -335,6 +351,14 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
             </MenuItem>
           )}
           <MenuItem onClick={onClose}>Back to songs</MenuItem>
+        </Sheet>
+      )}
+      {panel === 'install' && install === 'ios' && (
+        <Sheet title="Install Mosaic" onClose={closePanel}>
+          <p className="install__hint">
+            Tap <ShareIcon size={15} className="install__share" aria-label="Share" role="img" aria-hidden={false} /> then{' '}
+            <strong>Add to Home Screen</strong> to install Mosaic.
+          </p>
         </Sheet>
       )}
       {typeof panel === 'object' && panel !== null && (
