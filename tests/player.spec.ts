@@ -6,13 +6,31 @@ test.beforeEach(async ({ page }) => {
   await openSong(page);
 });
 
-test('share link opens the player directly', async ({ page }) => {
+test('share link opens the player and desktop expands without changing mobile', async ({ page }) => {
   await expect(page.locator('.player__title')).toHaveText(SONG_NAME);
   await expect(page.locator('.stem-row')).toHaveCount(STEM_COUNT);
   // Removed features stay removed.
   await expect(page.locator('.chips')).toHaveCount(0);
   await expect(page.getByText('Loop')).toHaveCount(0);
   await expect(page.locator('.footer')).toContainText('by Kheelesh Poorun');
+
+  const player = page.locator('.player');
+  await page.setViewportSize({ width: 393, height: 844 });
+  await expect(player).toHaveCSS('display', 'flex');
+  expect((await player.boundingBox())!.width).toBeLessThanOrEqual(520);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(player).toHaveCSS('display', 'grid');
+  const stems = await page.locator('.stems').boundingBox();
+  const controls = await page.locator('.player__bottom').boundingBox();
+  expect((await player.boundingBox())!.width).toBeGreaterThan(1000);
+  expect(stems).not.toBeNull();
+  expect(controls).not.toBeNull();
+  expect(controls!.x).toBeGreaterThan(stems!.x + stems!.width);
+
+  await page.setViewportSize({ width: 393, height: 844 });
+  await expect(player).toHaveCSS('display', 'flex');
+  expect((await player.boundingBox())!.width).toBeLessThanOrEqual(520);
 });
 
 test('loading modal closes once the stems are decoded', async ({ page }) => {

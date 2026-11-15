@@ -85,87 +85,93 @@ export function Home({ library, imports, onOpen, onImport, onRemoveImport }: Pro
         </div>
       </header>
 
-      <InstallCard />
+      <div className="home__layout">
+        <div className="home__intro">
+          <InstallCard />
 
-      <button
-        type="button"
-        className={`dropzone ${dragging ? 'dropzone--active' : ''}`}
-        onClick={() => inputRef.current?.click()}
-      >
-        <span className="dropzone__icon">
-          <UploadIcon size={28} />
-        </span>
-        <span className="dropzone__title">Drop your stems here</span>
-        <span className="dropzone__hint">
-          Drag the files exported from Moises (e.g. <em>Song_vocals_mixed.mp3</em>), or a folder of them
-        </span>
-        <span className="pill-button">Browse files</span>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT}
-        multiple
-        hidden
-        onChange={(e) => {
-          handleFiles([...(e.target.files ?? [])]);
-          e.target.value = '';
-        }}
-      />
+          <button
+            type="button"
+            className={`dropzone ${dragging ? 'dropzone--active' : ''}`}
+            onClick={() => inputRef.current?.click()}
+          >
+            <span className="dropzone__icon">
+              <UploadIcon size={28} />
+            </span>
+            <span className="dropzone__title">Drop your stems here</span>
+            <span className="dropzone__hint">
+              Drag the files exported from Moises (e.g. <em>Song_vocals_mixed.mp3</em>), or a folder of them
+            </span>
+            <span className="pill-button">Browse files</span>
+          </button>
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            handleFiles([...(e.target.files ?? [])]);
+            e.target.value = '';
+          }}
+        />
 
-      {imports.length > 0 && (
-        <section className="song-list">
-          <h2 className="section-title">Imported</h2>
-          <p className="section-hint">Plays on this device only — imported songs can't be shared.</p>
-          {imports.map((song) => (
-            <SongRow
-              key={song.id}
-              song={song}
-              subtitle={`${song.stems.length} stems · Local`}
-              onOpen={() => onOpen(song)}
-              action={
-                <button type="button" className="icon-button" aria-label="Remove" onClick={() => onRemoveImport(song.id)}>
-                  <CloseIcon size={20} />
-                </button>
-              }
-            />
-          ))}
-        </section>
-      )}
+        <div className="home__songs">
+          {imports.length > 0 && (
+            <section className="song-list">
+              <h2 className="section-title">Imported</h2>
+              <p className="section-hint">Plays on this device only — imported songs can't be shared.</p>
+              {imports.map((song) => (
+                <SongRow
+                  key={song.id}
+                  song={song}
+                  subtitle={`${song.stems.length} stems · Local`}
+                  onOpen={() => onOpen(song)}
+                  action={
+                    <button type="button" className="icon-button" aria-label="Remove" onClick={() => onRemoveImport(song.id)}>
+                      <CloseIcon size={20} />
+                    </button>
+                  }
+                />
+              ))}
+            </section>
+          )}
 
-      <section className="song-list">
-        <h2 className="section-title">Library</h2>
-        {savedSongs.length > 0 && (
-          <p className="section-hint">
-            {savedSongs.length} saved for offline · {savedMb} MB
-          </p>
-        )}
-        {library.length === 0 ? (
-          <p className="section-hint">No shared songs yet. Add stems to the library folder of the repo.</p>
-        ) : (
-          library.map((song) => (
-            <SongRow
-              key={song.id}
-              song={song}
-              subtitle={`${song.stems.length} stems`}
-              onOpen={() => onOpen(song)}
-              action={
-                <>
-                  <DownloadButton
-                    saved={isSongSaved(song, saved)}
-                    progress={downloads[song.id] ?? null}
-                    onDownload={() => void download(song)}
-                    onRemove={() => setRemoving(song)}
-                  />
-                  <button type="button" className="icon-button" aria-label="Copy share link" onClick={() => shareSong(song)}>
-                    <LinkIcon size={20} />
-                  </button>
-                </>
-              }
-            />
-          ))
-        )}
-      </section>
+          <section className="song-list">
+            <h2 className="section-title">Library</h2>
+            {savedSongs.length > 0 && (
+              <p className="section-hint">
+                {savedSongs.length} saved for offline · {savedMb} MB
+              </p>
+            )}
+            {library.length === 0 ? (
+              <p className="section-hint">No shared songs yet. Add stems to the library folder of the repo.</p>
+            ) : (
+              library.map((song) => (
+                <SongRow
+                  key={song.id}
+                  song={song}
+                  subtitle={`${song.stems.length} stems`}
+                  onOpen={() => onOpen(song)}
+                  action={
+                    <>
+                      <DownloadButton
+                        saved={isSongSaved(song, saved)}
+                        progress={downloads[song.id] ?? null}
+                        onDownload={() => void download(song)}
+                        onRemove={() => setRemoving(song)}
+                      />
+                      <button type="button" className="icon-button" aria-label="Copy share link" onClick={() => shareSong(song)}>
+                        <LinkIcon size={20} />
+                      </button>
+                    </>
+                  }
+                />
+              ))
+            )}
+          </section>
+        </div>
+      </div>
 
       <Footer />
 

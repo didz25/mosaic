@@ -14,6 +14,27 @@ test('home lists the library songs', async ({ page }) => {
   await expect(row.getByRole('button', { name: 'Copy share link' })).toBeVisible();
 });
 
+test('desktop home expands into two columns while mobile stays stacked', async ({ page }) => {
+  await page.goto('./');
+  const layout = page.locator('.home__layout');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(layout).toHaveCSS('display', 'contents');
+  const mobileDropzone = await page.locator('.dropzone').boundingBox();
+  const mobileLibrary = await page.locator('.song-list').last().boundingBox();
+  expect(mobileDropzone).not.toBeNull();
+  expect(mobileLibrary).not.toBeNull();
+  expect(mobileDropzone!.y).toBeLessThan(mobileLibrary!.y);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(layout).toHaveCSS('display', 'grid');
+  const desktopDropzone = await page.locator('.dropzone').boundingBox();
+  const desktopLibrary = await page.locator('.song-list').last().boundingBox();
+  expect(desktopDropzone).not.toBeNull();
+  expect(desktopLibrary).not.toBeNull();
+  expect(desktopDropzone!.x).toBeLessThan(desktopLibrary!.x);
+  expect((await layout.boundingBox())!.width).toBeGreaterThan(1000);
+});
+
 test('footer shows the version and credit', async ({ page }) => {
   await page.goto('./');
   const footer = page.locator('.footer');
