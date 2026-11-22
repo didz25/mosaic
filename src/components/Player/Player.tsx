@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { detectBeats } from '../../audio/bpm';
 import { beatGrid } from '../../audio/chords';
-import { Engine } from '../../audio/Engine';
+import { Engine, MIN_LOOP_DURATION } from '../../audio/Engine';
 import { useEngineState, usePosition } from '../../audio/hooks';
 import { clearAnalyses, isNumber, isNumberArray, readAnalysis, writeAnalysis } from '../../lib/analysisCache';
 import { shareSong } from '../../lib/share';
@@ -12,12 +12,16 @@ import { barsFromBeats } from '../../lib/chordChart';
 import { keyName } from '../../lib/chords';
 import { installMode, onInstallChange, promptInstall } from '../../lib/install';
 import { Footer } from '../Footer';
-import { ChevronDownIcon, MoreVerticalIcon, ShareIcon } from '../icons';
+import { ChevronDownIcon, MoreVerticalIcon, ShareIcon, SlidersIcon } from '../icons';
+import { BassPage } from './BassPage';
+import { BassStrip } from './BassStrip';
 import { ChordSheet } from './ChordSheet';
 import { ChordStrip } from './ChordStrip';
+import { DisplaySheet } from './DisplaySheet';
 import { DrumSheet } from './DrumSheet';
 import { DrumStrip } from './DrumStrip';
 import { LoadingModal } from './LoadingModal';
+import { barIndexAt, LoopBar, type LoopBarSpan } from './LoopBar';
 import { MiniPlayer } from './MiniPlayer';
 import { MetronomeSheet } from './MetronomeSheet';
 import { PitchSpeedSheet } from './PitchSpeedSheet';
@@ -25,10 +29,16 @@ import { SeekBar } from './SeekBar';
 import { MenuItem, Sheet } from './Sheet';
 import { StemRow } from './StemRow';
 import { Transport } from './Transport';
+import { useBass } from './useBass';
 import { useChords, type ChordsState } from './useChords';
 import { useDrums } from './useDrums';
+import type { BassStringCount } from '../../audio/bass';
 
-type Panel = null | 'metronome' | 'pitch' | 'menu' | 'install' | 'chords' | 'drums' | { stem: number };
+type Panel = null | 'metronome' | 'pitch' | 'menu' | 'display' | 'install' | 'chords' | 'drums' | { stem: number };
+
+function isBassViewUrl(): boolean {
+  return new URLSearchParams(window.location.search).get('view') === 'bass';
+}
 
 interface CachedBeats {
   bpm: number;
@@ -118,6 +128,45 @@ function writeShowDrums(show: boolean) {
   }
 }
 
+/** Per-viewer preference: bass tab strip under the drum strip (on unless switched off). */
+const BASS_KEY = 'mosaic:bass';
+
+function readShowBass(): boolean {
+  try {
+    return localStorage.getItem(BASS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function writeShowBass(show: boolean) {
+  try {
+    if (show) localStorage.removeItem(BASS_KEY);
+    else localStorage.setItem(BASS_KEY, 'off');
+  } catch {
+    // storage unavailable — the choice lasts for this session only
+  }
+}
+
+/** Per-viewer preference: 4-string (E-A-D-G) or 5-string (B-E-A-D-G) bass tab. */
+const BASS_STRINGS_KEY = 'mosaic:bass-strings';
+
+function readBassStrings(): BassStringCount {
+  try {
+    return localStorage.getItem(BASS_STRINGS_KEY) === '4' ? 4 : 5;
+  } catch {
+    return 5;
+  }
+}
+
+function writeBassStrings(count: BassStringCount) {
+  try {
+    localStorage.setItem(BASS_STRINGS_KEY, String(count));
+  } catch {
+    // storage unavailable — the choice lasts for this session only
+  }
+}
+
 /** Subtitle of the Key row in Pitch & speed: the original key, and where the pitch takes it. */
 function keyLabel({ status, analysis }: ChordsState, pitch: number): string {
   if (status === 'analysing') return 'Detecting key…';
@@ -145,18 +194,63 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
   const state = useEngineState(engine);
   const position = usePosition(engine, state.playing);
   const [panel, setPanel] = useState<Panel>(null);
+  const [bassPage, setBassPage] = useState(isBassViewUrl);
+  const closingBassRef = useRef(false);
   const install = useSyncExternalStore(onInstallChange, installMode);
   const [showWaves, setShowWaves] = useState(readShowWaves);
   const [showChords, setShowChords] = useState(readShowChords);
   const [showDrums, setShowDrums] = useState(readShowDrums);
+  const [showBass, setShowBass] = useState(readShowBass);
+  const [bassStrings, setBassStrings] = useState<BassStringCount>(readBassStrings);
+  const chooseBassStrings = useCallback((count: BassStringCount) => {
+    writeBassStrings(count);
+    setBassStrings(count);
+  }, []);
   // While the seek bar is dragged, the waveform highlight follows the drag, not the playhead.
   const [scrub, setScrub] = useState<number | null>(null);
   // Bumped by Re-analyse song: the chords and drums start a new job.
   const [run, setRun] = useState(0);
   const shown = scrub ?? position;
   const closePanel = useCallback(() => setPanel(null), []);
-  // Docked in the sheets you read along with the music, so playback stays one tap away.
+  // Docked in the sheets and BassPage so playback stays one tap away.
   const dock = <MiniPlayer engine={engine} state={state} position={position} scrub={scrub} onScrub={setScrub} />;
+
+  useEffect(() => {
+    closingBassRef.current = false;
+  }, [bassPage]);
+
+  useEffect(() => {
+    const onPop = () => setBassPage(isBassViewUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const openBassPage = useCallback(() => {
+    setPanel(null);
+    if (!isBassViewUrl()) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'bass');
+      history.pushState({ ...history.state, bassPage: true }, '', url.toString());
+    }
+    setBassPage(true);
+  }, []);
+
+  const closeBassPage = useCallback(() => {
+    if (closingBassRef.current) return;
+    if (!isBassViewUrl()) {
+      setBassPage(false);
+      return;
+    }
+    if (history.state?.bassPage) {
+      closingBassRef.current = true;
+      history.back();
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      history.replaceState(history.state, '', url.toString());
+      setBassPage(false);
+    }
+  }, []);
 
   const runDetection = useCallback(async () => {
     engine.setMetronome({ detecting: true });
@@ -184,6 +278,7 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
   // After the beats effect above, so it sees beats it just set or a detection it just started.
   const chords = useChords(engine, song, state, run);
   const drums = useDrums(engine, song, state, run);
+  const bass = useBass(engine, song, state, drums, run);
 
   // Forget this song's cached beats, chords and drums and work them out again from the decoded stems.
   const reanalyse = () => {
@@ -203,18 +298,93 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
   }, [drums.analysis, beats, downbeat, bpm, offset, state.duration]);
 
   // Keyboard shortcuts.
+  const shortcutRef = useRef<{ bassPage: boolean; bassBars?: LoopBarSpan[]; fallbackBars: LoopBarSpan[] }>({
+    bassPage,
+    bassBars: bass.analysis?.bars,
+    fallbackBars: chordBars.bars,
+  });
+  shortcutRef.current = { bassPage, bassBars: bass.analysis?.bars, fallbackBars: chordBars.bars };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target instanceof HTMLInputElement && e.target.type !== 'range') || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'Space') {
         e.preventDefault();
         engine.toggle();
       } else if (e.code === 'ArrowLeft' && !(e.target instanceof HTMLInputElement)) engine.skip(-5);
       else if (e.code === 'ArrowRight' && !(e.target instanceof HTMLInputElement)) engine.skip(5);
+      else if (e.key === '[' || e.key === ']') {
+        const { bassPage: inBass, bassBars } = shortcutRef.current;
+        const pos = engine.position;
+        if (inBass && bassBars?.length) {
+          const idx = barIndexAt(bassBars, pos);
+          if (e.key === '[') engine.setLoopA(bassBars[idx].start);
+          else {
+            const curA = engine.state.loop.start;
+            if (curA !== null && bassBars[idx].end <= curA + 0.05) {
+              const aIdx = barIndexAt(bassBars, curA + 1e-3);
+              engine.setLoop(bassBars[idx].start, bassBars[Math.max(idx, aIdx)].end, { enabled: true });
+            } else engine.setLoopB(bassBars[idx].end);
+          }
+        } else if (e.key === '[') engine.setLoopA(pos);
+        else engine.setLoopB(pos);
+      } else if (e.key === 'l' || e.key === 'L') {
+        const { loop, duration } = engine.state;
+        if (loop.start !== null && loop.end !== null) {
+          engine.toggleLoop();
+          return;
+        }
+        const { bassPage: inBass, bassBars, fallbackBars } = shortcutRef.current;
+        const bars = inBass && bassBars?.length ? bassBars : bassBars?.length ? bassBars : fallbackBars;
+        const pos = engine.position;
+        if (loop.start !== null) {
+          if (inBass && bassBars?.length) {
+            const aIdx = barIndexAt(bassBars, loop.start + 1e-3);
+            const curIdx = barIndexAt(bassBars, pos);
+            engine.setLoop(bassBars[aIdx].start, bassBars[Math.max(aIdx, curIdx)].end, { enabled: true });
+          } else if (pos > loop.start + MIN_LOOP_DURATION) engine.setLoopB(pos);
+          else engine.setLoop(loop.start, Math.min(duration, loop.start + 8), { enabled: true });
+        } else if (bars.length) {
+          const idx = barIndexAt(bars, pos);
+          engine.setLoop(bars[idx].start, bars[idx].end, { enabled: true });
+        } else {
+          const start = Math.max(0, Math.min(pos, Math.max(0, duration - 8)));
+          const end = Math.min(duration, start + 8);
+          if (end - start >= MIN_LOOP_DURATION) engine.setLoop(start, end, { enabled: true });
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [engine]);
+
+  if (bassPage && state.status === 'ready') {
+    return (
+      <BassPage
+        title={song.name}
+        slug={song.id}
+        engine={engine}
+        stems={state.stems}
+        analysis={bass.analysis}
+        status={bass.status}
+        chords={chords.analysis}
+        bpm={state.metronome.bpm}
+        pitch={state.pitch}
+        strings={bassStrings}
+        onStringsChange={chooseBassStrings}
+        loop={state.loop}
+        duration={state.duration}
+        position={shown}
+        playing={state.playing}
+        speed={state.speed}
+        bassBoost={state.bassBoost}
+        onSeek={seek}
+        onClose={closeBassPage}
+        dock={dock}
+      />
+    );
+  }
 
   return (
     <div className="screen player">
@@ -225,6 +395,9 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
         <h1 className="player__title" title={song.name}>
           {song.name}
         </h1>
+        <button type="button" className="icon-button" aria-label="Strips and bass options" onClick={() => setPanel('display')}>
+          <SlidersIcon size={24} />
+        </button>
         <button type="button" className="icon-button" aria-label="Share" onClick={() => shareSong(song)}>
           <ShareIcon size={28} />
         </button>
@@ -251,6 +424,7 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
       {showDrums && (
         <DrumStrip drums={drums} position={shown} bpm={state.metronome.bpm} onOpen={() => setPanel('drums')} onTempo={() => setPanel('metronome')} />
       )}
+      {showBass && <BassStrip bass={bass} position={shown} pitch={state.pitch} strings={bassStrings} loop={state.loop} onOpen={openBassPage} />}
 
       <div className="stems" style={{ '--progress': `${state.duration ? (shown / state.duration) * 100 : 0}%` } as CSSProperties}>
         {state.stems.map((_, i) => (
@@ -260,6 +434,16 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
 
       <div className="player__bottom">
         <SeekBar engine={engine} state={state} position={position} scrub={scrub} onScrub={setScrub} />
+        <LoopBar
+          engine={engine}
+          loop={state.loop}
+          position={shown}
+          duration={state.duration}
+          disabled={state.status !== 'ready'}
+          bars={bass.analysis?.bars ?? chordBars.bars}
+          speed={state.speed}
+          showSpeed={state.loop.enabled}
+        />
         <Transport engine={engine} state={state} onMetronome={() => setPanel('metronome')} onPitch={() => setPanel('pitch')} />
         <Footer />
       </div>
@@ -279,6 +463,34 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
         />
       )}
       {panel === 'drums' && drums.analysis && <DrumSheet title={song.name} analysis={drums.analysis} position={shown} onSeek={seek} onClose={closePanel} dock={dock} />}
+      {panel === 'display' && (
+        <DisplaySheet
+          showChords={showChords}
+          onToggleChords={() => {
+            writeShowChords(!showChords);
+            setShowChords(!showChords);
+          }}
+          showDrums={showDrums}
+          onToggleDrums={() => {
+            writeShowDrums(!showDrums);
+            setShowDrums(!showDrums);
+          }}
+          showBass={showBass}
+          onToggleBass={() => {
+            writeShowBass(!showBass);
+            setShowBass(!showBass);
+          }}
+          showWaves={showWaves}
+          onToggleWaves={() => {
+            writeShowWaves(!showWaves);
+            setShowWaves(!showWaves);
+          }}
+          bassStrings={bassStrings}
+          onBassStringsChange={chooseBassStrings}
+          dock={dock}
+          onClose={closePanel}
+        />
+      )}
       {panel === 'menu' && (
         <Sheet title={song.name} onClose={closePanel}>
           {install && (
@@ -305,6 +517,7 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
               Copy share link
             </MenuItem>
           )}
+          <MenuItem onClick={() => setPanel('display')}>Strips &amp; bass</MenuItem>
           <MenuItem
             onClick={() => {
               writeShowWaves(!showWaves);
@@ -331,6 +544,15 @@ function PlayerView({ engine, song, onClose }: { engine: Engine; song: SongSourc
             }}
           >
             {showDrums ? 'Hide drums' : 'Show drums'}
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              writeShowBass(!showBass);
+              setShowBass(!showBass);
+              closePanel();
+            }}
+          >
+            {showBass ? 'Hide bass tab' : 'Show bass tab'}
           </MenuItem>
           <MenuItem
             onClick={() => {

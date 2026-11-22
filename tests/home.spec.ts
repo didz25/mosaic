@@ -33,6 +33,7 @@ test('desktop home expands into two columns while mobile stays stacked', async (
   expect(desktopLibrary).not.toBeNull();
   expect(desktopDropzone!.x).toBeLessThan(desktopLibrary!.x);
   expect((await layout.boundingBox())!.width).toBeGreaterThan(1000);
+  expect((await page.locator('.home').boundingBox())!.width).toBeGreaterThanOrEqual(1400);
 });
 
 test('footer shows the version and credit', async ({ page }) => {

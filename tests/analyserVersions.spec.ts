@@ -9,14 +9,17 @@ const rel = (files: string[]) => files.map((f) => path.relative(root, f).replace
 
 test('each cached analysis is versioned by every source it runs, worker included', () => {
   const versions = analyserVersions(root);
-  expect(Object.keys(versions).sort()).toEqual(['beats', 'chords', 'drums']);
+  expect(Object.keys(versions).sort()).toEqual(['bass', 'beats', 'chords', 'drums']);
   for (const v of Object.values(versions)) expect(v).toMatch(/^[0-9a-f]{8}$/);
-  expect(new Set(Object.values(versions)).size).toBe(3);
+  expect(new Set(Object.values(versions)).size).toBe(4);
 
   expect(rel(analyserSources(root, ANALYSERS.beats))).toEqual(['src/audio/beats.ts', 'src/audio/beats.worker.ts', 'src/audio/bpm.ts']);
-  // The drum transcriber borrows the FFT from the chord recogniser, so a change there re-runs drums too.
+  // The drum and bass transcribers borrow the FFT from the chord recogniser, so a change there re-runs them too.
   expect(rel(analyserSources(root, ANALYSERS.drums))).toEqual(
     expect.arrayContaining(['src/audio/drumDetect.ts', 'src/audio/drums.ts', 'src/audio/drums.worker.ts', 'src/audio/mixDown.ts', 'src/audio/chords.ts']),
+  );
+  expect(rel(analyserSources(root, ANALYSERS.bass))).toEqual(
+    expect.arrayContaining(['src/audio/bassDetect.ts', 'src/audio/bass.ts', 'src/audio/bass.worker.ts', 'src/audio/mixDown.ts', 'src/audio/chords.ts']),
   );
 });
 
@@ -38,6 +41,7 @@ test('changing an analyser changes its version, and only for the analyses that u
     expect(after.drums).not.toBe(before.drums);
     expect(after.beats).toBe(before.beats);
     expect(after.chords).toBe(before.chords);
+    expect(after.bass).toBe(before.bass);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

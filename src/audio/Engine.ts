@@ -10,6 +10,12 @@ import { FALLBACK_PITCH_DELAY, measurePitchDelay } from './pitchDelay';
 
 /** Slider position that equals unity gain (Moises shows the thumb at ~75% by default). */
 export const DEFAULT_VOLUME = 0.75;
+/** Bass stem gain multiplier when Bass boost is active on BassPage (~+4.9 dB). */
+export const BASS_BOOST_GAIN = 1.75;
+/** Backing-band gain multiplier while Bass boost is active and bass is unmuted (~-2.9 dB). */
+export const BASS_BOOST_BAND_GAIN = 0.72;
+/** Minimum A-B loop span in seconds. */
+export const MIN_LOOP_DURATION = 0.25;
 const TICK_MS = 25;
 /** Sources are scheduled this far in the future so every stem starts on the same audio frame. */
 const START_DELAY = 0.05;
@@ -17,6 +23,12 @@ const START_DELAY = 0.05;
 const DECODE_CONCURRENCY = 2;
 /** Byte progress reaches the store at most this often while stems download. */
 const BYTES_REPORT_MS = 100;
+
+export interface LoopState {
+  start: number | null;
+  end: number | null;
+  enabled: boolean;
+}
 
 export interface StemState {
   name: string;
@@ -40,6 +52,8 @@ export interface EngineState {
   stems: StemState[];
   speed: number; // 0.5 .. 1.5
   pitch: number; // semitones -12 .. 12
+  bassBoost: boolean;
+  loop: LoopState;
   metronome: MetronomeSettings & { detecting: boolean };
 }
 
@@ -85,6 +99,10 @@ export class Engine {
   private anchorOffset = 0;
   /** Paused position. */
   private offset = 0;
+  /** Unwrapped track time where the current playback pass started (preserved across setSpeed). */
+  private startOffset = 0;
+  /** True while the active AudioBufferSourceNodes use native source.loop = true. */
+  private loopingPass = false;
   state: EngineState;
 
   constructor(song: SongSource) {
@@ -124,6 +142,8 @@ export class Engine {
       stems: song.stems.map((s) => ({ name: s.name, volume: DEFAULT_VOLUME, muted: false })),
       speed: 1,
       pitch: 0,
+      bassBoost: false,
+      loop: { start: null, end: null, enabled: false },
       metronome: {
         enabled: false,
         bpm: song.bpm ?? 120,
@@ -220,21 +240,59 @@ export class Engine {
   }
 
   // ---------- transport ----------
-  get position(): number {
-    if (!this.state.playing) return this.offset;
-    const elapsed = Math.max(0, this.ctx.currentTime - this.anchorTime) * this.state.speed;
-    return Math.min(this.anchorOffset + elapsed, this.state.duration);
+  private activeLoop(): { start: number; end: number } | null {
+    const { start, end, enabled } = this.state.loop;
+    if (!enabled || start === null || end === null || end - start < MIN_LOOP_DURATION) return null;
+    return { start, end };
   }
 
-  /** AudioContext time at which track time `t` leaves the sources (valid while playing). */
+  private minBufferDuration(): number {
+    let min = Infinity;
+    for (const t of this.tracks) {
+      if (t.buffer) min = Math.min(min, t.buffer.duration);
+    }
+    return min === Infinity ? 0 : min;
+  }
+
+  private canNativeLoop(end: number): boolean {
+    return this.tracks.some((t) => !!t.buffer) && this.minBufferDuration() >= end - 0.005;
+  }
+
+  private get rawPosition(): number {
+    if (!this.state.playing) return this.offset;
+    const elapsed = Math.max(0, this.ctx.currentTime - this.anchorTime) * this.state.speed;
+    return this.anchorOffset + elapsed;
+  }
+
+  private wrapRaw(raw: number): { pos: number; cycle: number } {
+    const loop = this.loopingPass ? this.activeLoop() : null;
+    if (loop && raw >= loop.end) {
+      const len = loop.end - loop.start;
+      const cycle = Math.floor((raw - loop.start) / len);
+      return { pos: loop.start + (raw - loop.start - cycle * len), cycle };
+    }
+    return { pos: Math.max(0, Math.min(raw, this.state.duration)), cycle: 0 };
+  }
+
+  get position(): number {
+    return this.state.playing ? this.wrapRaw(this.rawPosition).pos : this.offset;
+  }
+
+  /** AudioContext time at which unwrapped track time `t` leaves the sources (valid while playing). */
   private toCtxTime = (t: number) => this.anchorTime + (t - this.anchorOffset) / this.state.speed;
 
-  /** AudioContext time at which track time `t` is heard, after SoundTouch's processing delay. */
+  /** AudioContext time at which unwrapped track time `t` is heard, after SoundTouch's processing delay. */
   private toHeardTime = (t: number) => this.toCtxTime(t) + this.musicDelay;
 
-  /** Track time currently coming out of the speakers (lags `position` while SoundTouch is engaged). */
+  /** Track time and loop cycle currently coming out of the speakers (lags `position` while SoundTouch is engaged). */
+  private get heardState(): { pos: number; cycle: number } {
+    if (!this.state.playing) return { pos: this.offset, cycle: 0 };
+    const rawHeard = Math.max(this.startOffset, this.rawPosition - this.musicDelay * this.state.speed);
+    return this.wrapRaw(rawHeard);
+  }
+
   private get heardPosition(): number {
-    return Math.max(0, this.position - this.musicDelay * this.state.speed);
+    return this.heardState.pos;
   }
 
   async play() {
@@ -242,7 +300,9 @@ export class Engine {
     // Before the first await, so it still runs inside the tap (iOS silent switch).
     enterPlaybackSession();
     await this.ctx.resume();
-    if (this.offset >= this.state.duration - 0.05) this.offset = 0;
+    const loop = this.activeLoop();
+    if (loop && this.offset >= loop.end - 0.02) this.offset = loop.start;
+    else if (this.offset >= this.state.duration - 0.05) this.offset = 0;
     this.startSources(this.offset);
     this.set({ playing: true });
     this.startMetronome();
@@ -251,6 +311,7 @@ export class Engine {
   pause() {
     if (!this.state.playing) return;
     this.offset = this.position;
+    this.loopingPass = false;
     this.stopSources();
     this.metronome.stop();
     leavePlaybackSession();
@@ -282,18 +343,29 @@ export class Engine {
     // SoundTouch keeps whatever it had buffered (e.g. from before a pause or seek) and would play
     // it first, pushing the music further behind the metronome. Start from an empty pipeline.
     if (this.pitchNode) this.connectPitchNode();
+    const loop = this.activeLoop();
+    const minDur = this.minBufferDuration();
+    const nativeEnd = loop ? Math.min(loop.end, minDur) : 0;
+    const useNative = !!loop && offset < loop.end && this.canNativeLoop(loop.end) && nativeEnd - loop.start >= MIN_LOOP_DURATION;
     const when = this.ctx.currentTime + START_DELAY;
     for (const track of this.tracks) {
       if (!track.buffer || offset >= track.buffer.duration) continue;
       const source = this.ctx.createBufferSource();
       source.buffer = track.buffer;
       source.playbackRate.value = this.state.speed;
+      if (useNative) {
+        source.loop = true;
+        source.loopStart = loop.start;
+        source.loopEnd = nativeEnd;
+      }
       source.connect(track.gain);
       source.start(when, offset);
       track.source = source;
     }
     this.anchorTime = when;
     this.anchorOffset = offset;
+    this.startOffset = offset;
+    this.loopingPass = useNative;
   }
 
   private stopSources() {
@@ -311,7 +383,17 @@ export class Engine {
 
   private tick() {
     if (!this.state.playing) return;
+    const loop = this.activeLoop();
+    if (this.loopingPass && loop) {
+      this.metronome.schedule(this.toHeardTime, this.state.duration, loop);
+      return;
+    }
+    if (loop && !this.loopingPass && this.startOffset < loop.end && this.position >= loop.end) {
+      this.seek(loop.start);
+      return;
+    }
     if (this.position >= this.state.duration) {
+      this.loopingPass = false;
       this.stopSources();
       this.metronome.stop();
       this.offset = this.state.duration;
@@ -319,20 +401,36 @@ export class Engine {
       this.set({ playing: false });
       return;
     }
-    this.metronome.schedule(this.toHeardTime, this.state.duration);
+    this.metronome.schedule(this.toHeardTime, this.state.duration, null);
   }
 
-  /** Test/debug hook: per-stem start offsets and the shared start time. */
+  /** Test/debug hook: per-stem start offsets, effective gains, and the shared start time. */
   syncReport() {
     return {
       anchorTime: this.anchorTime,
       anchorOffset: this.anchorOffset,
       musicDelay: this.musicDelay,
-      sources: this.tracks.map((t) => (t.source ? { rate: t.source.playbackRate.value } : null)),
+      loopingPass: this.loopingPass,
+      gains: this.state.stems.map((_, i) => this.stemGain(i)),
+      sources: this.tracks.map((t) =>
+        t.source
+          ? {
+              rate: t.source.playbackRate.value,
+              loop: t.source.loop,
+              loopStart: t.source.loopStart,
+              loopEnd: t.source.loopEnd,
+            }
+          : null,
+      ),
     };
   }
 
   // ---------- mixer ----------
+  setBassBoost(enabled: boolean) {
+    if (this.state.bassBoost === enabled) return;
+    this.set({ bassBoost: enabled });
+    this.applyGains();
+  }
   setVolume(i: number, volume: number) {
     this.updateStem(i, { volume, muted: false });
   }
@@ -356,6 +454,11 @@ export class Engine {
     this.set({ stems: this.state.stems.map((s) => ({ ...s, volume: DEFAULT_VOLUME, muted: false })) });
     this.applyGains();
   }
+  /** Unmute every stem, keeping current volumes. */
+  unmuteAll() {
+    this.set({ stems: this.state.stems.map((s) => ({ ...s, muted: false })) });
+    this.applyGains();
+  }
 
   private updateStem(i: number, patch: Partial<StemState>) {
     this.set({ stems: this.state.stems.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
@@ -371,11 +474,23 @@ export class Engine {
     return stems.every((s, j) => s.muted === (j !== i));
   }
 
+  private bassStemIndex(): number {
+    return this.state.stems.findIndex((s) => /bass/i.test(s.name));
+  }
+
+  private stemGain(i: number): number {
+    if (!Engine.audible(this.state.stems, i)) return 0;
+    const base = sliderToGain(this.state.stems[i].volume);
+    if (!this.state.bassBoost) return base;
+    const bassIdx = this.bassStemIndex();
+    if (bassIdx < 0 || !Engine.audible(this.state.stems, bassIdx)) return base;
+    return i === bassIdx ? base * BASS_BOOST_GAIN : base * BASS_BOOST_BAND_GAIN;
+  }
+
   private applyGains() {
     const now = this.ctx.currentTime;
-    this.state.stems.forEach((s, i) => {
-      const gain = Engine.audible(this.state.stems, i) ? sliderToGain(s.volume) : 0;
-      this.tracks[i].gain.gain.setTargetAtTime(gain, now, 0.015);
+    this.state.stems.forEach((_, i) => {
+      this.tracks[i].gain.gain.setTargetAtTime(this.stemGain(i), now, 0.015);
     });
   }
 
@@ -387,9 +502,9 @@ export class Engine {
   setSpeed(speed: number) {
     const s = Math.round(Math.max(0.5, Math.min(1.5, speed)) * 100) / 100;
     if (this.state.playing) {
-      // Re-anchor so position stays continuous across the rate change.
+      // Re-anchor with unwrapped rawPosition so source timing and loopCycles stay continuous across wraps.
       const now = this.ctx.currentTime;
-      this.anchorOffset = this.position;
+      this.anchorOffset = this.rawPosition;
       this.anchorTime = Math.max(now, this.anchorTime);
       for (const t of this.tracks) t.source?.playbackRate.setValueAtTime(s, this.anchorTime);
     }
@@ -402,6 +517,105 @@ export class Engine {
     const p = Math.max(-12, Math.min(12, Math.round(semitones)));
     this.set({ pitch: p });
     void this.updatePitchNode();
+  }
+
+  // ---------- A-B loop ----------
+  private updateLoop(next: LoopState, seekToStart = false) {
+    // Capture wrapped position BEFORE state.loop changes so wrapRaw uses the previous bounds.
+    const curPos = this.position;
+    const dur = this.state.duration;
+    const start = next.start === null ? null : Math.max(0, Math.min(next.start, dur));
+    const end = next.end === null ? null : Math.max(0, Math.min(next.end, dur));
+    const sanitized: LoopState = {
+      start,
+      end,
+      enabled: next.enabled && start !== null && end !== null && end - start >= MIN_LOOP_DURATION,
+    };
+    this.set({ loop: sanitized });
+    const active = this.activeLoop();
+    if (!this.state.playing) {
+      if (seekToStart && active) {
+        this.offset = active.start;
+        this.listeners.forEach((fn) => fn());
+      }
+      return;
+    }
+    if ((seekToStart && active) || (active && curPos >= active.end)) {
+      this.startSources(active.start);
+      this.startMetronome();
+      return;
+    }
+    const now = this.ctx.currentTime;
+    this.anchorOffset = curPos;
+    this.anchorTime = Math.max(now, this.anchorTime);
+    this.startOffset = curPos;
+    const minDur = this.minBufferDuration();
+    const nativeEnd = active ? Math.min(active.end, minDur) : 0;
+    const useNative = !!active && this.canNativeLoop(active.end) && nativeEnd - active.start >= MIN_LOOP_DURATION;
+    for (const t of this.tracks) {
+      if (!t.source) continue;
+      if (useNative && active) {
+        t.source.loopStart = active.start;
+        t.source.loopEnd = nativeEnd;
+        t.source.loop = true;
+      } else {
+        t.source.loop = false;
+      }
+    }
+    this.loopingPass = useNative;
+    this.startMetronome();
+  }
+
+  setLoopA(time?: number) {
+    const dur = this.state.duration;
+    if (dur < MIN_LOOP_DURATION) return;
+    const a = Math.max(0, Math.min(time ?? this.position, dur - MIN_LOOP_DURATION));
+    const { end, enabled } = this.state.loop;
+    const next: LoopState =
+      end !== null && a <= end - MIN_LOOP_DURATION ? { start: a, end, enabled } : { start: a, end: null, enabled: false };
+    this.updateLoop(next, false);
+  }
+
+  setLoopB(time?: number) {
+    const dur = this.state.duration;
+    if (dur < MIN_LOOP_DURATION) return;
+    const rawB = Math.max(0, Math.min(time ?? this.position, dur));
+    const curA = this.state.loop.start;
+    let start: number;
+    let end: number;
+    if (curA === null) {
+      start = 0;
+      end = Math.min(dur, Math.max(MIN_LOOP_DURATION, rawB));
+    } else if (rawB < curA - MIN_LOOP_DURATION) {
+      start = rawB;
+      end = curA;
+    } else {
+      end = Math.min(dur, Math.max(curA + MIN_LOOP_DURATION, rawB));
+      start = end - curA < MIN_LOOP_DURATION ? Math.max(0, end - MIN_LOOP_DURATION) : curA;
+    }
+    this.updateLoop({ start, end, enabled: true }, false);
+  }
+
+  setLoop(start: number, end: number, options?: { enabled?: boolean; seekToStart?: boolean }) {
+    const dur = this.state.duration;
+    if (dur < MIN_LOOP_DURATION) return;
+    let a = Math.max(0, Math.min(start, end, dur));
+    let b = Math.min(dur, Math.max(start, end, 0));
+    if (b - a < MIN_LOOP_DURATION) {
+      b = Math.min(dur, a + MIN_LOOP_DURATION);
+      if (b - a < MIN_LOOP_DURATION) a = Math.max(0, b - MIN_LOOP_DURATION);
+    }
+    this.updateLoop({ start: a, end: b, enabled: options?.enabled ?? true }, options?.seekToStart ?? false);
+  }
+
+  toggleLoop() {
+    const { start, end, enabled } = this.state.loop;
+    if (start === null || end === null || end - start < MIN_LOOP_DURATION) return;
+    this.updateLoop({ start, end, enabled: !enabled }, false);
+  }
+
+  clearLoop() {
+    this.updateLoop({ start: null, end: null, enabled: false }, false);
   }
 
   private async updatePitchNode() {
@@ -462,7 +676,10 @@ export class Engine {
 
   private startMetronome() {
     this.metronome.configure(this.state.metronome);
-    if (this.state.playing) this.metronome.reset(this.heardPosition);
+    if (this.state.playing) {
+      const { pos, cycle } = this.heardState;
+      this.metronome.reset(pos, cycle);
+    }
   }
 
   /** Track time of the click nearest to `t` (tracked beats or fixed grid, offset applied). */
@@ -518,6 +735,12 @@ export class Engine {
   /** Decoded drums stem for the drum strip; null when the song has none (no other stem stands in). */
   drumBuffer(): AudioBuffer | null {
     const idx = this.state.stems.findIndex((s) => /drum|perc|beat/i.test(s.name));
+    return idx >= 0 ? (this.tracks[idx]?.buffer ?? null) : null;
+  }
+
+  /** Decoded bass stem for the bass tab strip; null when the song has none (no other stem stands in). */
+  bassBuffer(): AudioBuffer | null {
+    const idx = this.state.stems.findIndex((s) => /bass/i.test(s.name));
     return idx >= 0 ? (this.tracks[idx]?.buffer ?? null) : null;
   }
 

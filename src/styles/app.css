@@ -135,7 +135,7 @@ button:disabled {
 
 .player__header {
   display: grid;
-  grid-template-columns: 52px 1fr 48px 48px;
+  grid-template-columns: 52px 1fr 44px 44px 44px;
   align-items: center;
   padding: 10px 8px 0 6px;
   min-height: 64px;
@@ -461,7 +461,8 @@ button:disabled {
 
 /* chord strip on top of the stems: fixed key badge + chords scrolling under a fixed playhead */
 .chords,
-.drums {
+.drums,
+.bass {
   flex-shrink: 0;
   display: flex;
   height: 56px;
@@ -472,7 +473,8 @@ button:disabled {
 }
 
 .chords__key,
-.drums__badge {
+.drums__badge,
+.bass__badge {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -487,14 +489,16 @@ button:disabled {
 }
 
 .chords__key small,
-.drums__badge small {
+.drums__badge small,
+.bass__badge small {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
 .chords__view,
-.drums__view {
+.drums__view,
+.bass__view {
   position: relative;
   flex: 1;
   min-width: 0;
@@ -505,13 +509,15 @@ button:disabled {
 }
 
 .chords__view:disabled,
-.drums__view:disabled {
+.drums__view:disabled,
+.bass__view:disabled {
   opacity: 1;
   cursor: default;
 }
 
 .chords__status,
-.drums__status {
+.drums__status,
+.bass__status {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -522,7 +528,8 @@ button:disabled {
 }
 
 .chords__track,
-.drums__track {
+.drums__track,
+.bass__track {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -531,7 +538,8 @@ button:disabled {
 }
 
 .chords__chip,
-.drums__chip {
+.drums__chip,
+.bass__chip {
   position: absolute;
   top: 10px;
   bottom: 10px;
@@ -548,12 +556,14 @@ button:disabled {
 }
 
 .chords__chip--active,
-.drums__chip--active {
+.drums__chip--active,
+.bass__chip--active {
   color: var(--text);
 }
 
 .chords__playhead,
-.drums__playhead {
+.drums__playhead,
+.bass__playhead {
   position: absolute;
   top: 8px;
   bottom: 8px;
@@ -567,7 +577,8 @@ button:disabled {
 
 @media (prefers-reduced-motion: reduce) {
   .chords__chip,
-  .drums__chip {
+  .drums__chip,
+  .bass__chip {
     transition: none;
   }
 }
@@ -577,7 +588,40 @@ button:disabled {
   height: 64px;
 }
 
-.drums__chip {
+.bass {
+  height: 68px;
+  margin-top: 6px;
+}
+
+.bass__badge span {
+  letter-spacing: 0.04em;
+}
+
+.bass__strings {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 11px 6px;
+  border-right: 1px solid var(--border-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.bass__strings--4 {
+  padding: 14px 6px;
+}
+
+.bass__playhead {
+  background: var(--heart);
+  opacity: 0.85;
+}
+
+.drums__chip,
+.bass__chip {
   justify-content: center;
   top: 9px;
   bottom: 9px;
@@ -585,26 +629,38 @@ button:disabled {
   padding: 0;
 }
 
-.drums__chip--change {
+.drums__chip--change,
+.bass__chip--change {
   border-left: 2px solid var(--text-muted);
 }
 
-.drums__chip--active.drums__chip--change {
+.drums__chip--active.drums__chip--change,
+.bass__chip--active.bass__chip--change {
   border-left-color: var(--text);
 }
 
-/* Same groove as the bar before: still drawn (the hits may differ a little), with a 𝄎 tag above it. */
-.drums__chip--repeat {
+.bass__chip--loop {
+  box-shadow:
+    inset 0 2px 0 var(--heart),
+    inset 0 -2px 0 var(--heart);
+  color: var(--text);
+}
+
+/* Same groove/riff as the bar before: still drawn, with a 𝄎 tag above it. */
+.drums__chip--repeat,
+.bass__chip--repeat {
   overflow: visible;
 }
 
-.drums__chip--repeat .drums__tag {
+.drums__chip--repeat .drums__tag,
+.bass__chip--repeat .bass__tag {
   top: -8px;
   left: 4px;
   display: flex;
 }
 
-.drums__chip--fill {
+.drums__chip--fill,
+.bass__chip--fill {
   /* The box reaches the strip's top edge to hold the tag; the pattern stays on the shared rows. */
   top: 0;
   padding-top: 9px;
@@ -613,7 +669,8 @@ button:disabled {
 }
 
 /* Out of the flow, so it never squeezes or shifts the fill's pattern. */
-.drums__tag {
+.drums__tag,
+.bass__tag {
   position: absolute;
   top: 1px;
   left: 5px;
@@ -632,6 +689,94 @@ button:disabled {
   /* faint line at the start of every beat */
   background-image: linear-gradient(to right, var(--border-subtle) 1px, transparent 1px);
   background-size: calc(100% / var(--beats)) 100%;
+}
+
+.bass__mini {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  margin: 4px 0;
+  background-size: calc(100% / var(--beats)) 100%, 100% 100%;
+}
+
+.bass__mini--5 {
+  /* 5 string lines (G..B) + faint beat lines */
+  background-image:
+    linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(
+      to bottom,
+      transparent calc(10% - 0.5px),
+      var(--track-dim) calc(10% - 0.5px),
+      var(--track-dim) calc(10% + 0.5px),
+      transparent calc(10% + 0.5px),
+      transparent calc(30% - 0.5px),
+      var(--track-dim) calc(30% - 0.5px),
+      var(--track-dim) calc(30% + 0.5px),
+      transparent calc(30% + 0.5px),
+      transparent calc(50% - 0.5px),
+      var(--track-dim) calc(50% - 0.5px),
+      var(--track-dim) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px),
+      transparent calc(70% - 0.5px),
+      var(--track-dim) calc(70% - 0.5px),
+      var(--track-dim) calc(70% + 0.5px),
+      transparent calc(70% + 0.5px),
+      transparent calc(90% - 0.5px),
+      var(--track-dim) calc(90% - 0.5px),
+      var(--track-dim) calc(90% + 0.5px),
+      transparent calc(90% + 0.5px)
+    );
+}
+
+.bass__mini--4 {
+  /* 4 string lines (G..E) + faint beat lines */
+  background-image:
+    linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(
+      to bottom,
+      transparent calc(14% - 0.5px),
+      var(--track-dim) calc(14% - 0.5px),
+      var(--track-dim) calc(14% + 0.5px),
+      transparent calc(14% + 0.5px),
+      transparent calc(38% - 0.5px),
+      var(--track-dim) calc(38% - 0.5px),
+      var(--track-dim) calc(38% + 0.5px),
+      transparent calc(38% + 0.5px),
+      transparent calc(62% - 0.5px),
+      var(--track-dim) calc(62% - 0.5px),
+      var(--track-dim) calc(62% + 0.5px),
+      transparent calc(62% + 0.5px),
+      transparent calc(86% - 0.5px),
+      var(--track-dim) calc(86% - 0.5px),
+      var(--track-dim) calc(86% + 0.5px),
+      transparent calc(86% + 0.5px)
+    );
+}
+
+.bass__fret {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--surface);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: currentColor;
+}
+
+.bass__chip--fill .bass__fret {
+  background: var(--surface-raised);
+}
+
+.bass__note {
+  position: absolute;
+  height: 5px;
+  min-width: 5px;
+  margin-top: -2.5px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
 }
 
 .drums__dot {
@@ -669,20 +814,28 @@ button:disabled {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 0;
+  padding: 8px 0;
 }
 
 .stem-row {
   display: grid;
   grid-template-columns: 76px 1fr 56px;
   align-items: center;
-  min-height: 60px;
+  min-height: 52px;
   max-height: 72px;
-  flex: 1 0 60px;
+  flex: 1 0 52px;
   padding-right: 4px;
+}
+
+.stem-row:first-child {
+  margin-top: auto;
+}
+
+.stem-row:last-child {
+  margin-bottom: auto;
 }
 
 .stem-row__icon {
@@ -793,6 +946,56 @@ button:disabled {
   padding: 8px 24px 0;
 }
 
+.seek__track,
+.mini-player__track {
+  position: relative;
+}
+
+.seek__track .slider,
+.mini-player__track .slider {
+  position: relative;
+  z-index: 1;
+}
+
+.loop-overlay {
+  position: absolute;
+  top: 50%;
+  left: 6.5px;
+  right: 6.5px;
+  height: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.loop-overlay__range {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+
+.loop-overlay.is-on .loop-overlay__range {
+  background: var(--heart);
+  opacity: 0.6;
+}
+
+.loop-overlay__marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+}
+
+.loop-overlay.is-on .loop-overlay__marker {
+  background: var(--heart);
+  box-shadow: 0 0 6px var(--heart-glow);
+}
+
 .seek .slider {
   --rest-color: var(--track-seek);
   height: 28px;
@@ -805,6 +1008,281 @@ button:disabled {
   font-size: 13px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* A-B loop bar */
+.loop-bar-wrap {
+  width: 100%;
+  padding: 8px 16px 0;
+  container-type: inline-size;
+  container-name: loop-bar;
+}
+
+.loop-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.loop-bar__group {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.loop-bar__btn,
+.loop-bar__step,
+.loop-bar__toggle,
+.loop-bar__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.loop-bar__btn {
+  min-width: 44px;
+  padding: 0 12px;
+}
+
+.loop-bar__btn.is-set {
+  color: var(--text);
+}
+
+.loop-bar__group:has(.loop-bar__btn.is-set) {
+  border-color: var(--heart);
+}
+
+.loop-bar__step {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 0 6px;
+  font-size: 15px;
+}
+
+.loop-bar__step:first-child {
+  border-right: 1px solid var(--border-subtle);
+}
+
+.loop-bar__step:last-child {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.loop-bar__toggle {
+  gap: 6px;
+  min-width: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.loop-bar__toggle.is-on {
+  background: var(--heart);
+  border-color: var(--heart);
+  color: var(--on-accent);
+}
+
+.loop-bar__clear {
+  min-width: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.loop-bar__speed .loop-bar__btn:disabled {
+  opacity: 1;
+}
+
+@container loop-bar (max-width: 560px) {
+  /* Active bar-snapped loop + speed: balanced 2-row grid (Row 1: A & B 50/50, Row 2: Loop · × · Speed) */
+  .loop-bar--steppers.loop-bar--speed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19px 19px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__a {
+    grid-column: 1 / 3;
+    grid-row: 1;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__b {
+    grid-column: 3 / 5;
+    grid-row: 1;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__toggle {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__clear {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    justify-self: center;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__speed {
+    grid-column: 4 / 5;
+    grid-row: 2;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__group {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__group .loop-bar__btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 4px;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__step {
+    min-width: 44px;
+    padding: 0;
+  }
+
+  /* Initial BassPage state (no loop yet): keep [A] [B] [Loop bar] [Speed] on one compact row */
+  .loop-bar--speed:not(.loop-bar--loop) {
+    display: grid;
+    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(128px, auto);
+    gap: 6px;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__a,
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__b {
+    display: flex;
+    width: 100%;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__a .loop-bar__btn,
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__b .loop-bar__btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__toggle {
+    width: 100%;
+    min-width: 0;
+    padding: 0 8px;
+    gap: 5px;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__speed {
+    display: flex;
+    width: 100%;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__speed .loop-bar__step {
+    min-width: 38px;
+    padding: 0;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__speed .loop-bar__btn {
+    flex: 1;
+    min-width: 48px;
+    padding: 0 4px;
+  }
+}
+
+@container loop-bar (max-width: 450px) {
+  /* Active A-B loop + speed on narrow phones or sidebar: symmetrical 2-row grid */
+  .loop-bar--loop.loop-bar--speed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19px 19px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__a {
+    grid-column: 1 / 3;
+    grid-row: 1;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__b {
+    grid-column: 3 / 5;
+    grid-row: 1;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__toggle {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__clear {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    justify-self: center;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__speed {
+    grid-column: 4 / 5;
+    grid-row: 2;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__group {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__group .loop-bar__btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 4px;
+  }
+
+  .loop-bar--loop.loop-bar--speed .loop-bar__step {
+    min-width: 44px;
+    padding: 0;
+  }
+}
+
+@container loop-bar (max-width: 325px) {
+  .loop-bar--steppers.loop-bar--speed .loop-bar__step,
+  .loop-bar--loop.loop-bar--speed .loop-bar__step {
+    min-width: 34px;
+  }
+
+  .loop-bar--steppers.loop-bar--speed .loop-bar__btn,
+  .loop-bar--loop.loop-bar--speed .loop-bar__btn {
+    font-size: 12.5px;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) {
+    grid-template-columns: 1fr 1fr 2fr;
+  }
+
+  .loop-bar--speed:not(.loop-bar--loop) .loop-bar__speed {
+    grid-column: 1 / -1;
+  }
 }
 
 /* transport */
@@ -1296,6 +1774,34 @@ button:disabled {
   text-align: left;
 }
 
+.drum-map__row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.drum-map__row .drum-map__item {
+  flex: 1;
+  min-width: 0;
+}
+
+.drum-map__loop {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.drum-map__loop.is-on {
+  background: var(--heart);
+  color: var(--on-accent);
+}
+
 .drum-map__item.is-now {
   color: var(--text);
   box-shadow: inset 0 0 0 1.5px var(--border);
@@ -1303,6 +1809,820 @@ button:disabled {
 
 .drum-map__item .drums__mini {
   height: 26px;
+}
+
+.drum-map__item .bass__mini {
+  height: 30px;
+}
+
+/* Songsterr-style multi-bar bass tablature sheet, controls & in-sheet instrument mix */
+.songsterr-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.songsterr__system {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--text);
+  fill: none;
+  stroke: currentColor;
+  overflow: visible;
+}
+
+.songsterr__meta {
+  fill: var(--text-secondary);
+  stroke: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.songsterr__clef {
+  fill: var(--text-secondary);
+  stroke: none;
+  font-size: 12px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.songsterr__meter {
+  fill: var(--text);
+  stroke: none;
+  font-size: 14px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.songsterr__num {
+  fill: var(--text-muted);
+  stroke: none;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.songsterr__bar.is-now .songsterr__num {
+  fill: var(--text);
+}
+
+.songsterr__bar-loop {
+  fill: var(--heart);
+  fill-opacity: 0.14;
+  stroke: none;
+}
+
+.songsterr__bar-loop--off {
+  fill-opacity: 0.06;
+}
+
+.songsterr__loop-marker.is-off {
+  opacity: 0.45;
+}
+
+.songsterr__loop-edge {
+  stroke: var(--heart);
+  stroke-width: 2;
+}
+
+.songsterr__loop-tag {
+  fill: var(--heart);
+  stroke: none;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.songsterr__loop-tag--end {
+  text-anchor: end;
+}
+
+.songsterr__bar-now {
+  fill: var(--surface-raised);
+  stroke: none;
+}
+
+.songsterr__cursor {
+  fill: var(--heart);
+  fill-opacity: 0.16;
+  stroke: none;
+}
+
+.songsterr__cursor-line {
+  stroke: var(--heart);
+  stroke-width: 2;
+}
+
+.songsterr__rest,
+.songsterr__dot {
+  fill: var(--text-secondary);
+  stroke: none;
+}
+
+.songsterr__qrest {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.songsterr__bar-btn {
+  cursor: pointer;
+}
+
+.songsterr__hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.bass-tab__label {
+  fill: var(--text-secondary);
+  stroke: none;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.bass-tab__chord {
+  fill: var(--heart);
+  stroke: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bass-tab__bg {
+  fill: var(--surface);
+  stroke: none;
+}
+
+.songsterr__bar.is-now .bass-tab__bg {
+  fill: var(--surface-raised);
+}
+
+.bass-tab__fret {
+  fill: var(--text);
+  stroke: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.bass-tab__fret--now {
+  fill: var(--heart);
+}
+
+.bass-tab__fret--hit {
+  fill: var(--coach-hit);
+}
+
+.bass-tab__fret--timing {
+  fill: var(--coach-warn);
+}
+
+.bass-tab__fret--miss {
+  fill: var(--danger);
+}
+
+/* Full-screen bass tablature page (replaces mixer while keeping audio playing) */
+.screen.bass-page {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: env(safe-area-inset-top) 0 0;
+}
+
+.bass-page__top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-top);
+}
+
+.bass-page__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bass-page__title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.bass-page__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bass-page__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+
+.bass-page__sub .chord-now__name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bass-page__sub .chord-now__next {
+  font-size: 12px;
+}
+
+.bass-page__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.bass-page__toolbar .segmented {
+  flex: 1 1 140px;
+  min-height: 44px;
+}
+
+.bass-page__toolbar .segmented__btn {
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.bass-page__listen {
+  gap: 6px;
+  width: 100%;
+}
+
+.bass-page__listen.is-on {
+  background: var(--coach-hit);
+  border-color: var(--coach-hit);
+  color: var(--on-accent);
+}
+
+.bass-page__exports {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.bass-coach {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 36dvh;
+  overflow-y: auto;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.bass-coach--error {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bass-coach__err-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.bass-coach__err-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bass-coach__live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bass-coach__meter {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--track-dim);
+  overflow: hidden;
+}
+
+.bass-coach__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--coach-hit);
+  transition: width 0.06s linear;
+}
+
+.bass-coach__readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.bass-coach__you,
+.bass-coach__target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.bass-coach__you small,
+.bass-coach__target small {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bass-coach__you strong,
+.bass-coach__target strong {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bass-coach__cents {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--coach-warn);
+  font-variant-numeric: tabular-nums;
+}
+
+.bass-coach__cents.is-in {
+  color: var(--coach-hit);
+}
+
+.bass-coach__gauge {
+  position: relative;
+  flex: 1 1 80px;
+  min-width: 64px;
+  max-width: 140px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.bass-coach__gauge-mid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--track);
+}
+
+.bass-coach__gauge-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--heart);
+}
+
+.bass-coach__cue {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bass-coach__cue--hit {
+  color: var(--coach-hit);
+}
+
+.bass-coach__cue--warn {
+  color: var(--coach-warn);
+}
+
+.bass-coach__cue--miss {
+  color: var(--danger);
+}
+
+.bass-coach__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.bass-coach__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bass-coach__stat small {
+  color: var(--text-secondary);
+}
+
+.bass-coach__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.bass-coach__pill,
+.bass-coach__action,
+.bass-coach__select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bass-coach__pill.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.bass-coach__action {
+  border-color: var(--heart);
+  color: var(--heart);
+  flex-shrink: 0;
+}
+
+.bass-coach__offset {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.bass-coach__step {
+  min-width: 36px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bass-coach__offset-val {
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bass-coach__select {
+  max-width: 180px;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.bass-coach__tips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bass-coach__tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.bass-coach__tip--praise {
+  color: var(--coach-hit);
+}
+
+.bass-page__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 20px;
+}
+
+.bass-page__empty {
+  margin: 48px auto;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.bass-page .songsterr-sheet {
+  padding: 14px 12px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.bass-page__dock {
+  flex-shrink: 0;
+  padding: 6px 12px max(8px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.bass-page__transport {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bass-page__transport .loop-bar-wrap {
+  padding: 0;
+}
+
+.bass-mix-wrap {
+  position: relative;
+  margin: 0 -12px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bass-mix-wrap::before,
+.bass-mix-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 1px;
+  width: 28px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.bass-mix-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, var(--surface) 20%, transparent);
+}
+
+.bass-mix-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, var(--surface) 20%, transparent);
+}
+
+.bass-mix-wrap.has-fade-left::before,
+.bass-mix-wrap.has-fade-right::after {
+  opacity: 1;
+}
+
+.bass-mix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 12px;
+  padding: 0 12px 6px;
+  scrollbar-width: none;
+}
+
+.bass-mix::-webkit-scrollbar {
+  display: none;
+}
+
+.bass-mix__sep {
+  flex-shrink: 0;
+  width: 1px;
+  height: 22px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
+.bass-mix__btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 11px;
+  scroll-snap-align: start;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bass-mix__btn.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.bass-mix__boost.is-on {
+  background: var(--heart);
+  border-color: var(--heart);
+  color: var(--on-accent);
+}
+
+.bass-mix__dropdown,
+.bass-mix__menu {
+  display: contents;
+}
+
+.bass-mix__trigger {
+  display: none;
+}
+
+.bass-mix__chev {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+@media (max-width: 767px) {
+  .bass-mix-wrap {
+    margin: 0 0 6px;
+    overflow: visible;
+  }
+
+  .bass-mix-wrap::before,
+  .bass-mix-wrap::after {
+    display: none;
+  }
+
+  .bass-mix {
+    overflow: visible;
+    padding: 0 0 6px;
+    scroll-snap-type: none;
+  }
+
+  .bass-mix > .bass-mix__btn,
+  .bass-mix__dropdown {
+    flex: 1 1 auto;
+  }
+
+  .bass-mix__btn {
+    padding: 0 10px;
+  }
+
+  .bass-mix__dropdown {
+    display: flex;
+    position: relative;
+  }
+
+  .bass-mix__trigger {
+    display: inline-flex;
+    width: 100%;
+    color: var(--text);
+  }
+
+  .bass-mix__trigger.is-open {
+    border-color: var(--text);
+  }
+
+  .bass-mix__trigger.is-open .bass-mix__chev {
+    transform: rotate(180deg);
+  }
+
+  .bass-mix__menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    z-index: 25;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 210px;
+    max-width: calc(100vw - 24px);
+    max-height: min(55dvh, 360px);
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.5);
+  }
+
+  .bass-mix__dropdown.is-open .bass-mix__menu {
+    display: flex;
+  }
+
+  .bass-mix__menu .bass-mix__btn {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  .bass-mix__menu .bass-mix__btn.is-on {
+    background: var(--surface-raised);
+    border-color: transparent;
+    color: var(--text);
+  }
+
+  .bass-mix__menu .bass-mix__btn.is-on::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    margin-left: auto;
+    border-left: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  .bass-mix__menu .bass-mix__sep {
+    width: 100%;
+    height: 1px;
+    margin: 2px 0;
+    background: var(--border-subtle);
+  }
+}
+
+.display-bass {
+  padding-top: 14px;
+}
+
+.display-bass__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.display-bass__head small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.bass-ascii-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.bass-copy {
+  width: 100%;
+}
+
+.bass-ascii {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
 }
 
 .drum-map__bars {
@@ -1332,7 +2652,8 @@ button:disabled {
   margin-top: 12px;
 }
 
-.drum-score-print {
+.drum-score-print,
+.bass-score-print {
   display: none;
 }
 
@@ -1351,11 +2672,14 @@ button:disabled {
   }
 
   .drum-score-print,
-  .drum-score-print * {
+  .drum-score-print *,
+  .bass-score-print,
+  .bass-score-print * {
     visibility: visible !important;
   }
 
-  .drum-score-print {
+  .drum-score-print,
+  .bass-score-print {
     display: block !important;
     position: static;
     width: 100%;
@@ -1364,23 +2688,27 @@ button:disabled {
     font-family: Georgia, 'Times New Roman', serif;
   }
 
-  .drum-score-print__header {
+  .drum-score-print__header,
+  .bass-score-print__header {
     margin: 0 0 8mm;
     text-align: center;
   }
 
-  .drum-score-print__header h1 {
+  .drum-score-print__header h1,
+  .bass-score-print__header h1 {
     margin: 0;
     font-size: 24pt;
     font-weight: 600;
   }
 
-  .drum-score-print__header p {
+  .drum-score-print__header p,
+  .bass-score-print__header p {
     margin: 2mm 0 0;
     font-size: 10pt;
   }
 
-  .drum-score-print__system {
+  .drum-score-print__system,
+  .bass-score-print__system {
     display: block;
     width: 100%;
     height: auto;
@@ -1391,18 +2719,24 @@ button:disabled {
   }
 
   .drum-score-print__staff,
-  .drum-score-print__barline {
+  .drum-score-print__barline,
+  .bass-score-print__staff,
+  .bass-score-print__barline {
     fill: none;
     stroke: #222;
     stroke-width: 1;
   }
 
-  .drum-score-print__barline {
+  .drum-score-print__barline,
+  .bass-score-print__barline {
     stroke-width: 1.4;
   }
 
   .drum-score-print__clef,
-  .drum-score-print__note {
+  .drum-score-print__note,
+  .bass-score-print__beam,
+  .bass-score-print__rest,
+  .bass-score-print__dot {
     fill: #111;
     stroke: none;
   }
@@ -1420,7 +2754,10 @@ button:disabled {
   .drum-score-print__open,
   .drum-score-print__ghost,
   .drum-score-print__stem,
-  .drum-score-print__flag {
+  .drum-score-print__flag,
+  .bass-score-print__stem,
+  .bass-score-print__flag,
+  .bass-score-print__qrest {
     fill: none;
     stroke: #111;
     stroke-width: 1.5;
@@ -1433,27 +2770,73 @@ button:disabled {
   .drum-score-print__instrument,
   .drum-score-print__meter,
   .drum-score-print__number,
-  .drum-score-print__tuplet {
+  .drum-score-print__tuplet,
+  .bass-score-print__instrument,
+  .bass-score-print__meta,
+  .bass-score-print__clef,
+  .bass-score-print__string,
+  .bass-score-print__meter,
+  .bass-score-print__number,
+  .bass-score-print__chord,
+  .bass-score-print__fret,
+  .bass-score-print__tuplet {
     fill: #111;
     stroke: none;
     font-family: Georgia, 'Times New Roman', serif;
   }
 
-  .drum-score-print__instrument {
+  .bass-score-print__meta {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .drum-score-print__instrument,
+  .bass-score-print__instrument {
     font-size: 11px;
   }
 
-  .drum-score-print__meter {
+  .bass-score-print__clef {
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+
+  .bass-score-print__string {
+    font-size: 9px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+
+  .drum-score-print__meter,
+  .bass-score-print__meter {
     font-size: 14px;
     font-weight: 700;
     text-anchor: middle;
   }
 
-  .drum-score-print__number {
+  .drum-score-print__number,
+  .bass-score-print__number {
     font-size: 11px;
   }
 
-  .drum-score-print__tuplet {
+  .bass-score-print__chord {
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .bass-score-print__knockout {
+    fill: #fff;
+    stroke: none;
+  }
+
+  .bass-score-print__fret {
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+
+  .drum-score-print__tuplet,
+  .bass-score-print__tuplet {
     font-size: 9px;
     text-anchor: middle;
   }
@@ -2091,15 +3474,36 @@ button:disabled {
 
 @media (min-width: 768px) {
   .screen.home {
-    max-width: 800px;
-    padding-right: 28px;
-    padding-left: 28px;
+    max-width: none;
+    padding-right: 20px;
+    padding-left: 20px;
   }
 
   .screen.player {
-    max-width: 1000px;
-    padding-right: 28px;
-    padding-left: 28px;
+    max-width: none;
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .bass-page__top {
+    padding: 10px 20px;
+  }
+
+  .bass-page__body {
+    padding: 14px 20px 24px;
+  }
+
+  .bass-page__dock {
+    padding: 8px 20px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .bass-mix-wrap {
+    margin: 0 -20px 6px;
+  }
+
+  .bass-mix {
+    padding: 0 20px 8px;
+    scroll-padding-inline: 20px;
   }
 
   .sheet-backdrop {
@@ -2132,8 +3536,8 @@ button:disabled {
 
 @media (min-width: 900px) {
   .screen.home {
-    max-width: 1360px;
-    padding: max(24px, env(safe-area-inset-top)) 48px max(28px, env(safe-area-inset-bottom));
+    max-width: none;
+    padding: max(20px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
   }
 
   .home__header {
@@ -2143,9 +3547,9 @@ button:disabled {
 
   .home__layout {
     display: grid;
-    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(300px, 0.55fr) minmax(0, 1.45fr);
     align-items: stretch;
-    gap: 0 clamp(32px, 4vw, 56px);
+    gap: 0 clamp(24px, 2.5vw, 40px);
     min-width: 0;
   }
 
@@ -2183,6 +3587,39 @@ button:disabled {
   .home .footer {
     margin-top: 32px;
   }
+
+  .bass-page__listen {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .bass-page__exports {
+    display: flex;
+    width: auto;
+  }
+
+  .bass-coach {
+    padding: 12px 20px;
+  }
+
+  .bass-page__exports .pill-button {
+    white-space: nowrap;
+  }
+
+  .bass-page__toolbar .segmented {
+    flex: 0 0 auto;
+  }
+
+  .bass-page .drum-map {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 8px;
+  }
+
+  .bass-page .bass-copy {
+    width: auto;
+    align-self: flex-start;
+  }
 }
 
 @media (min-width: 1100px) {
@@ -2192,14 +3629,65 @@ button:disabled {
       'header header'
       'chords chords'
       'drums drums'
+      'bass bass'
       'stems bottom';
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    column-gap: clamp(32px, 4vw, 64px);
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    column-gap: clamp(20px, 2vw, 32px);
     width: 100%;
-    max-width: 1480px;
-    padding-right: clamp(28px, 4.5vw, 72px);
-    padding-left: clamp(28px, 4.5vw, 72px);
+    max-width: none;
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+
+  .bass-page__top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 24px;
+  }
+
+  .bass-page__toolbar {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .bass-page__body {
+    padding: 16px 24px 24px;
+  }
+
+  .bass-coach {
+    padding: 12px 24px;
+  }
+
+  .bass-page .songsterr-sheet {
+    padding: 16px 18px;
+  }
+
+  .bass-page__dock {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 580px);
+    align-items: center;
+    gap: 20px;
+    padding: 10px 24px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .bass-page__dock .bass-mix-wrap {
+    margin: 0;
+    border-bottom: 0;
+  }
+
+  .bass-page__dock .bass-mix-wrap::before,
+  .bass-page__dock .bass-mix-wrap::after {
+    display: none;
+  }
+
+  .bass-page__dock .bass-mix {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding: 0;
+    scroll-snap-type: none;
   }
 
   .player__header {
@@ -2220,6 +3708,12 @@ button:disabled {
 
   .drums {
     grid-area: drums;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .bass {
+    grid-area: bass;
     margin-right: 0;
     margin-left: 0;
   }
@@ -2251,14 +3745,12 @@ button:disabled {
     padding-left: 8px;
   }
 
+  .player__bottom .loop-bar-wrap {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
   .transport {
     padding: 20px 0 8px;
-  }
-}
-
-@media (min-width: 1500px) {
-  .screen.home {
-    padding-right: 64px;
-    padding-left: 64px;
   }
 }

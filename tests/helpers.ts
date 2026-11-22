@@ -20,6 +20,8 @@ export function engineState(page: Page) {
       position: number;
       speed: number;
       pitch: number;
+      bassBoost: boolean;
+      loop: { start: number | null; end: number | null; enabled: boolean };
       stems: { name: string; muted: boolean; volume: number }[];
       metronome: { enabled: boolean; bpm: number; offset: number; detecting: boolean; beats: number[] | null; downbeat: number };
     };
@@ -28,7 +30,18 @@ export function engineState(page: Page) {
 
 export function syncReport(page: Page) {
   return page.evaluate(() =>
-    (window as unknown as { __mosaicEngine: { syncReport(): { sources: ({ rate: number } | null)[]; musicDelay: number } } }).__mosaicEngine.syncReport(),
+    (
+      window as unknown as {
+        __mosaicEngine: {
+          syncReport(): {
+            loopingPass: boolean;
+            gains: number[];
+            sources: ({ rate: number; loop: boolean; loopStart: number; loopEnd: number } | null)[];
+            musicDelay: number;
+          };
+        };
+      }
+    ).__mosaicEngine.syncReport(),
   );
 }
 

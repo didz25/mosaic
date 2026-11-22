@@ -236,6 +236,12 @@ export const ChevronRightIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m15 5-7 7 7 7" strokeWidth={1.8} />
+  </Svg>
+);
+
 export const WaveIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4" strokeWidth={1.8} />
@@ -254,5 +260,26 @@ export const RepeatBarIcon = (p: IconProps) => (
     <path d="M17 5 7 19" strokeWidth={2.4} />
     <circle cx="7.5" cy="8" r="1.4" fill="currentColor" stroke="none" />
     <circle cx="16.5" cy="16" r="1.4" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
+/** Strip display and bass options icon (horizontal sliders). */
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h16M4 17h16" />
+    <circle cx="9" cy="7" r="2" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="17" r="2" fill="currentColor" stroke="none" />
+    <path d="M4 12h16" />
+    <circle cx="13" cy="12" r="2" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
+/** A-B loop repeat arrows icon. */
+export const LoopIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m17 3 3 3-3 3" />
+    <path d="M4 11V9a3 3 0 0 1 3-3h13" />
+    <path d="m7 21-3-3 3-3" />
+    <path d="M20 13v2a3 3 0 0 1-3 3H4" />
   </Svg>
 );

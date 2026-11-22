@@ -1,5 +1,6 @@
 import type { Engine, EngineState } from '../../audio/Engine';
 import { formatTime } from '../../lib/format';
+import { LoopOverlay } from './LoopBar';
 import { Slider } from './Slider';
 
 interface Props {
@@ -18,19 +19,22 @@ export function SeekBar({ engine, state, position, scrub, onScrub: setScrub }: P
 
   return (
     <div className="seek">
-      <Slider
-        label="Seek"
-        value={shown}
-        max={duration || 1}
-        step={0.01}
-        disabled={state.status !== 'ready'}
-        onChange={setScrub}
-        onCommit={(v) => {
-          setScrub(null);
-          engine.seek(v);
-        }}
-        onCancel={() => setScrub(null)}
-      />
+      <div className="seek__track">
+        <LoopOverlay loop={state.loop} duration={duration} />
+        <Slider
+          label="Seek"
+          value={shown}
+          max={duration || 1}
+          step={0.01}
+          disabled={state.status !== 'ready'}
+          onChange={setScrub}
+          onCommit={(v) => {
+            setScrub(null);
+            engine.seek(v);
+          }}
+          onCancel={() => setScrub(null)}
+        />
+      </div>
       <div className="seek__times">
         <span>{formatTime(shown)}</span>
         <span>-{formatTime(duration - shown)}</span>
