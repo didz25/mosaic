@@ -1,6 +1,7 @@
 import type { Engine, EngineState } from '../../audio/Engine';
 import { formatTime } from '../../lib/format';
 import { ForwardIcon, PauseIcon, PlayIcon, RewindIcon } from '../icons';
+import { LoopOverlay } from './LoopBar';
 import { Slider } from './Slider';
 
 interface Props {
@@ -23,20 +24,23 @@ export function MiniPlayer({ engine, state, position, scrub, onScrub: setScrub }
 
   return (
     <div className="mini-player">
-      <Slider
-        label="Seek"
-        className="mini-player__seek"
-        value={shown}
-        max={duration || 1}
-        step={0.01}
-        disabled={!ready}
-        onChange={setScrub}
-        onCommit={(v) => {
-          setScrub(null);
-          engine.seek(v);
-        }}
-        onCancel={() => setScrub(null)}
-      />
+      <div className="mini-player__track">
+        <LoopOverlay loop={state.loop} duration={duration} />
+        <Slider
+          label="Seek"
+          className="mini-player__seek"
+          value={shown}
+          max={duration || 1}
+          step={0.01}
+          disabled={!ready}
+          onChange={setScrub}
+          onCommit={(v) => {
+            setScrub(null);
+            engine.seek(v);
+          }}
+          onCancel={() => setScrub(null)}
+        />
+      </div>
       <div className="mini-player__row">
         <span className="mini-player__time">{formatTime(shown)}</span>
         <button type="button" className="icon-button" aria-label="Back 5 seconds" disabled={!ready} onClick={() => engine.skip(-5)}>

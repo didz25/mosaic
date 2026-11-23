@@ -11,7 +11,6 @@ test('share link opens the player and desktop expands without changing mobile', 
   await expect(page.locator('.stem-row')).toHaveCount(STEM_COUNT);
   // Removed features stay removed.
   await expect(page.locator('.chips')).toHaveCount(0);
-  await expect(page.getByText('Loop')).toHaveCount(0);
   await expect(page.locator('.footer')).toContainText('by Kheelesh Poorun');
 
   const player = page.locator('.player');
@@ -23,7 +22,7 @@ test('share link opens the player and desktop expands without changing mobile', 
   await expect(player).toHaveCSS('display', 'grid');
   const stems = await page.locator('.stems').boundingBox();
   const controls = await page.locator('.player__bottom').boundingBox();
-  expect((await player.boundingBox())!.width).toBeGreaterThan(1000);
+  expect((await player.boundingBox())!.width).toBeGreaterThanOrEqual(1400);
   expect(stems).not.toBeNull();
   expect(controls).not.toBeNull();
   expect(controls!.x).toBeGreaterThan(stems!.x + stems!.width);
@@ -536,13 +535,14 @@ test('a stale drum result in storage is analysed again instead of breaking the d
   expect(stored[1]).toBeNull();
 });
 
-test('re-analyse song forgets the cached beats, chords and drums and works them out again', async ({ page }) => {
+test('re-analyse song forgets the cached beats, chords, drums and bass and works them out again', async ({ page }) => {
   test.slow(); // every analysis runs twice
   await expect.poll(() => page.locator('.drums__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
   await expect.poll(() => page.locator('.chords__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
   const cached = () =>
-    page.evaluate((slug) => Object.keys(localStorage).filter((k) => /^mosaic:(beats|chords|drums):/.test(k) && k.endsWith(`:${slug}`)).length, SONG_SLUG);
-  await expect.poll(cached).toBe(3);
+    page.evaluate((slug) => Object.keys(localStorage).filter((k) => /^mosaic:(beats|chords|drums|bass):/.test(k) && k.endsWith(`:${slug}`)).length, SONG_SLUG);
+  await expect.poll(cached).toBe(4);
   // A marker on the cached drums: re-analysing must replace it.
   await page.evaluate((slug) => {
     const key = Object.keys(localStorage).find((k) => k.startsWith('mosaic:drums:') && k.endsWith(`:${slug}`))!;
@@ -554,7 +554,8 @@ test('re-analyse song forgets the cached beats, chords and drums and works them 
   await expect(page.locator('.drums__status')).toContainText('Analysing drums');
   await expect.poll(() => page.locator('.drums__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
   await expect.poll(() => page.locator('.chords__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
-  await expect.poll(cached).toBe(3);
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await expect.poll(cached).toBe(4);
   const marker = await page.evaluate((slug) => {
     const key = Object.keys(localStorage).find((k) => k.startsWith('mosaic:drums:') && k.endsWith(`:${slug}`))!;
     return JSON.parse(localStorage.getItem(key)!).marker ?? null;
@@ -693,4 +694,773 @@ test('the chord, metronome and pitch sheets have the mini player; menus do not',
   await page.getByRole('button', { name: 'More options' }).click();
   await expect(page.getByRole('dialog', { name: SONG_NAME })).toBeVisible();
   await expect(page.locator('.mini-player')).toHaveCount(0);
+});
+
+test('bass strip shows Songsterr fret numbers and string labels under the drum strip, and follows the playhead', async ({ page }) => {
+  const chips = page.locator('.bass__chip');
+  await expect.poll(() => chips.count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await expect(page.locator('.bass__badge')).toHaveText('5-strTAB');
+  await expect(page.locator('.bass__strings')).toHaveText('GDAEB');
+  expect(await page.locator('.bass__chip .bass__fret').count()).toBeGreaterThan(20);
+
+  const drums = (await page.locator('.drums').boundingBox())!;
+  const strip = (await page.locator('.bass').boundingBox())!;
+  const firstStem = (await page.locator('.stem-row').first().boundingBox())!;
+  expect(strip.y).toBeGreaterThanOrEqual(drums.y + drums.height);
+  expect(strip.y + strip.height).toBeLessThanOrEqual(firstStem.y);
+
+  const shift = () => page.locator('.bass__track').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+  expect(await shift()).toBe(0);
+  await clickSeek(page, 0.5);
+  await expect.poll(shift).toBeLessThan(-1000);
+  await expect(page.locator('.bass__chip--active')).toHaveCount(1);
+});
+
+test('a stale bass result in storage is analysed again instead of breaking the bass sheet', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const key = `mosaic:bass:${analyserVersions(process.cwd()).bass}:${SONG_SLUG}`;
+  const old = `mosaic:bass:v0:${SONG_SLUG}`;
+  await page.addInitScript(
+    ([key, old]) => {
+      if (sessionStorage.getItem('seeded-bass')) return;
+      sessionStorage.setItem('seeded-bass', '1');
+      // Invalid shape: string 9 out of range.
+      const bar = {
+        start: 0,
+        end: 2,
+        beats: [0, 0.5, 1, 1.5],
+        kind: 'riff',
+        riff: 0,
+        repeat: false,
+        notes: [{ step: 0, midi: 28, string: 9, fret: 0, duration: 4, velocity: 0.8 }],
+      };
+      const stale = JSON.stringify({ bars: [bar], meter: 4, division: 4, swing: false });
+      localStorage.setItem(key, stale);
+      localStorage.setItem(old, stale);
+    },
+    [key, old],
+  );
+  await page.reload();
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.locator('.bass__view').click();
+  await expect(page.locator('.sheet-backdrop')).toHaveCount(0);
+  await expect(page.getByRole('main', { name: 'Bass tab' })).toBeVisible();
+  expect(errors).toEqual([]);
+
+  const stored = await page.evaluate(([key, old]) => [JSON.parse(localStorage.getItem(key)!).bars.length, localStorage.getItem(old)], [key, old]);
+  expect(stored[0]).toBeGreaterThan(10);
+  expect(stored[1]).toBeNull();
+});
+
+test('clicking the bass strip opens a full-screen Bass tab page with responsive Songsterr systems, 4/5-string switch, ASCII view, song map, instrument playback, and pitch transposition', async ({
+  page,
+}) => {
+  test.slow();
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await clickSeek(page, 0.5);
+  await page.evaluate(() => {
+    const w = window as unknown as { __mosaicEngine: unknown; __savedEngine?: unknown };
+    w.__savedEngine = w.__mosaicEngine;
+  });
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  await expect(page).toHaveURL(/\?song=.*&view=bass$/);
+  await expect(page.locator('.sheet-backdrop')).toHaveCount(0);
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator('.chord-now__name')).toHaveText(/^Bar \d+$/);
+  await expect(sheet.locator('.drum-feel')).toHaveText(/^5-str \(B–G\) · [34]\/4 · (Straight|Shuffle)$/);
+  await expect(sheet.locator('.chord-meta')).toHaveText(/^Bar \d+ of \d+ · ♩ = \d+$/);
+  await expect(sheet.locator('.mini-player')).toBeVisible();
+
+  // Mobile uses 2 bars per Songsterr system; desktop expands to full width and fits 4 bars per system
+  await page.setViewportSize({ width: 393, height: 844 });
+  await expect(sheet.locator('svg.songsterr__system').first()).toHaveAttribute('aria-label', 'Bass tab bars 1 to 2');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect((await sheet.boundingBox())!.width).toBeGreaterThanOrEqual(1400);
+  await expect(sheet.locator('svg.songsterr__system').first()).toHaveAttribute('aria-label', 'Bass tab bars 1 to 4');
+  await page.setViewportSize({ width: 393, height: 826 });
+
+  // Full-song Songsterr multi-bar systems with T A B clef, tuning labels, active bar + cursor
+  expect(await sheet.locator('svg.songsterr__system').count()).toBeGreaterThan(5);
+  const firstLabels = await sheet.locator('svg.songsterr__system').first().locator('.bass-tab__label').allTextContents();
+  expect(firstLabels).toEqual(['G', 'D', 'A', 'E', 'B']);
+  await expect(sheet.locator('.songsterr__bar.is-now')).toHaveCount(1);
+  await expect(sheet.locator('.songsterr__cursor')).toHaveCount(1);
+  expect(await sheet.locator('.bass-tab__fret').count()).toBeGreaterThan(20);
+  // Active measure highlight must paint behind the horizontal string lines so they stay visible.
+  const linesOnTop = await sheet.locator('svg.songsterr__system:has(.songsterr__bar-now)').evaluate((sys) => {
+    const bg = sys.querySelector('.songsterr__bar-now')!;
+    const lines = [...sys.querySelectorAll('.notation__line')];
+    return lines.length > 0 && lines.every((line) => !!(bg.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  expect(linesOnTop).toBe(true);
+
+  // Tapping a bar in the Songsterr page seeks there
+  await sheet.getByRole('button', { name: 'Bar 21', exact: true }).click();
+  await expect(sheet.locator('.chord-now__name')).toHaveText('Bar 21');
+
+  // Song map seeks to a section
+  const items = sheet.locator('.drum-map__item');
+  expect(await items.count()).toBeGreaterThan(1);
+  const target = items.nth(1);
+  const firstBar = Number((await target.locator('.drum-map__bars').textContent())!.split('–')[0]);
+  await target.click();
+  await expect(sheet.locator('.chord-now__name')).toHaveText(`Bar ${firstBar}`);
+
+  // In-page instrument selector: Bass only -> open Stems dropdown -> toggle Drums on -> All
+  const mix = sheet.getByRole('group', { name: 'Instruments to play' });
+  await mix.getByRole('button', { name: 'Bass only' }).click();
+  let stems = (await engineState(page)).stems;
+  expect(stems.filter((s) => !s.muted).map((s) => s.name)).toEqual([expect.stringMatching(/bass/i)]);
+  await mix.getByRole('button', { name: /^Stems/ }).click();
+  await mix.getByRole('button', { name: 'Drums' }).click();
+  stems = (await engineState(page)).stems;
+  expect(stems.filter((s) => !s.muted)).toHaveLength(2);
+  await mix.getByRole('button', { name: 'All', exact: true }).click();
+  stems = (await engineState(page)).stems;
+  expect(stems.every((s) => !s.muted)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeVisible();
+
+  // Switch between 5-string and 4-string bass inside the page
+  await sheet.getByRole('button', { name: '4-string', exact: true }).click();
+  await expect(sheet.locator('.drum-feel')).toHaveText(/^4-str \(E–G\) · [34]\/4 · (Straight|Shuffle)$/);
+  expect(await sheet.locator('svg.songsterr__system').first().locator('.bass-tab__label').allTextContents()).toEqual(['G', 'D', 'A', 'E']);
+
+  // ASCII view toggles and sticks across Back button return / reopen without reloading audio
+  await sheet.getByRole('button', { name: 'ASCII', exact: true }).click();
+  await expect(sheet.locator('.bass-ascii')).toContainText('G|');
+  await expect(sheet.locator('.bass-ascii')).not.toContainText('B|');
+  await sheet.getByRole('button', { name: 'Back to mixer' }).click();
+  await expect(page).toHaveURL(/\?song=[^&]+$/);
+  await expect(page.locator('.modal-backdrop')).toHaveCount(0);
+  await expect(page.locator('.transport__play')).toBeEnabled();
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as { __mosaicEngine: unknown; __savedEngine?: unknown };
+      return w.__mosaicEngine === w.__savedEngine;
+    }),
+  ).toBe(true);
+  await expect(page.locator('.bass__badge')).toHaveText('4-strTAB');
+  await expect(page.locator('.bass__strings')).toHaveText('GDAE');
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  await expect(sheet.locator('.bass-ascii')).toBeVisible();
+
+  // Switch back to Tab, verify browser Back returns cleanly, and pitch transposition updates fret numbers
+  await sheet.getByRole('button', { name: 'Tab', exact: true }).click();
+  const tabFretsBefore = await sheet.locator('.bass-tab__fret').allTextContents();
+  await page.goBack();
+  await expect(page).toHaveURL(/\?song=[^&]+$/);
+  await expect(page.locator('.transport__play')).toBeEnabled();
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as { __mosaicEngine: unknown; __savedEngine?: unknown };
+      return w.__mosaicEngine === w.__savedEngine;
+    }),
+  ).toBe(true);
+  await page.getByRole('button', { name: 'Pitch and speed' }).click();
+  await page.getByRole('button', { name: 'Increase pitch' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const tabFretsAfter = await sheet.locator('.bass-tab__fret').allTextContents();
+  expect(tabFretsAfter).not.toEqual(tabFretsBefore);
+  await page.keyboard.press('Escape');
+  await expect(page).toHaveURL(/\?song=[^&]+$/);
+});
+
+test('strips and bass options sheet toggles strips and 4/5-string bass, and sticks across reload', async ({ page }) => {
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.getByRole('button', { name: 'Strips and bass options' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Strips & bass' });
+
+  await dialog.getByRole('switch', { name: 'Chords strip' }).click();
+  await dialog.getByRole('switch', { name: 'Drums strip' }).click();
+  await dialog.getByRole('button', { name: '4-string (E–G)' }).click();
+  await expect(dialog).toBeVisible(); // stays open for multiple toggles
+  await page.keyboard.press('Escape');
+
+  await expect(page.locator('.chords')).toHaveCount(0);
+  await expect(page.locator('.drums')).toHaveCount(0);
+  await expect(page.locator('.bass')).toBeVisible();
+  await expect(page.locator('.bass__badge')).toHaveText('4-strTAB');
+  await expect(page.locator('.bass__strings')).toHaveText('GDAE');
+
+  await page.reload();
+  await expect(page.locator('.transport__play')).toBeEnabled({ timeout: 45_000 });
+  await expect(page.locator('.chords')).toHaveCount(0);
+  await expect(page.locator('.drums')).toHaveCount(0);
+  await expect(page.locator('.bass__badge')).toHaveText('4-strTAB');
+});
+
+test('the bass page exports Markdown (.md) and PDF scores', async ({ page }) => {
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await expect.poll(() => page.locator('.chords__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+
+  // Markdown (.md) download
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    sheet.getByRole('button', { name: 'Export .md' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe(`${SONG_SLUG}-bass-tab.md`);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const md = Buffer.concat(chunks).toString('utf8');
+  expect(md).toContain(`# ${SONG_NAME} — Bass Tablature`);
+  expect(md).toContain('**Tuning:** 5-string standard (B–E–A–D–G)');
+  expect(md).toContain('**Key:** ');
+  expect(md).toContain('BPM');
+  expect(md).toContain('G|');
+  expect(md).toContain('B|');
+
+  // PDF print score
+  await page.evaluate(() => {
+    (window as Window & { printCalls?: number }).printCalls = 0;
+    window.print = () => {
+      (window as Window & { printCalls?: number }).printCalls! += 1;
+    };
+  });
+  await sheet.getByRole('button', { name: 'Export PDF' }).click();
+  await expect(page.locator('.bass-score-print__header h1')).toHaveText(SONG_NAME);
+  await expect(page.locator('.bass-score-print__header')).toContainText('Bass tablature (5-string B–E–A–D–G)');
+  await expect(page.locator('.bass-score-print__system').first()).toHaveAttribute('aria-label', /^Bass tab bars 1 to \d+$/);
+  expect(await page.locator('.bass-score-print__system').count()).toBeGreaterThan(1);
+  await expect.poll(() => page.evaluate(() => (window as Window & { printCalls?: number }).printCalls)).toBe(1);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#root')).toBeHidden();
+  await expect(page.locator('.bass-score-print')).toBeVisible();
+
+  // Switch back to screen and verify 4-string export
+  await page.emulateMedia({ media: 'screen' });
+  await sheet.getByRole('button', { name: '4-string', exact: true }).click();
+  await expect(page.locator('.bass-score-print__header')).toContainText('Bass tablature (4-string E–A–D–G)');
+  const [download4] = await Promise.all([
+    page.waitForEvent('download'),
+    sheet.getByRole('button', { name: 'Export .md' }).click(),
+  ]);
+  const stream4 = await download4.createReadStream();
+  const chunks4: Buffer[] = [];
+  for await (const chunk of stream4) chunks4.push(chunk as Buffer);
+  const md4 = Buffer.concat(chunks4).toString('utf8');
+  expect(md4).toContain('**Tuning:** 4-string standard (E–A–D–G)');
+  expect(md4).toContain('\nG|');
+  expect(md4).not.toContain('\nB|');
+});
+
+test('bass tab can be hidden from the song menu, and the choice sticks', async ({ page }) => {
+  await expect(page.locator('.bass')).toBeVisible();
+  await page.getByRole('button', { name: 'More options' }).click();
+  await page.getByRole('button', { name: 'Hide bass tab' }).click();
+  await expect(page.locator('.bass')).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.locator('.transport__play')).toBeEnabled({ timeout: 45_000 });
+  await expect(page.locator('.bass')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'More options' }).click();
+  await page.getByRole('button', { name: 'Show bass tab' }).click();
+  await expect(page.locator('.bass')).toBeVisible();
+});
+
+test('A–B loop repeats a region in sync on the main mixer, toggles off, and clears', async ({ page }) => {
+  await expect(page.getByRole('group', { name: 'Playback speed' })).toHaveCount(0);
+  await clickSeek(page, 0.1);
+  await page.getByRole('button', { name: 'Set loop start A' }).click();
+  await page.locator('.transport__play').click();
+  await page.waitForTimeout(850);
+  await page.getByRole('button', { name: 'Set loop end B' }).click();
+
+  const initial = await engineState(page);
+  expect(initial.loop.enabled).toBe(true);
+  expect(initial.loop.start).not.toBeNull();
+  expect(initial.loop.end).not.toBeNull();
+  expect(initial.loop.end! - initial.loop.start!).toBeGreaterThanOrEqual(0.25);
+  await expect(page.locator('.seek .loop-overlay__range')).toBeVisible();
+
+  // Inline speed control appears in loop mode and updates every stem's playbackRate in sync.
+  const speedGroup = page.getByRole('group', { name: 'Playback speed' });
+  await expect(speedGroup).toBeVisible();
+  await speedGroup.getByRole('button', { name: 'Slower' }).click();
+  expect((await engineState(page)).speed).toBe(0.95);
+  await expect.poll(async () => (await syncReport(page)).sources.every((s) => !!s && Math.abs(s.rate - 0.95) < 1e-3)).toBe(true);
+  await speedGroup.getByRole('button', { name: /Reset speed/ }).click();
+  expect((await engineState(page)).speed).toBe(1);
+
+  const report = await syncReport(page);
+  expect(report.loopingPass).toBe(true);
+  expect(report.sources).toHaveLength(STEM_COUNT);
+  expect(
+    report.sources.every(
+      (s) =>
+        s !== null &&
+        s.loop === true &&
+        Math.abs(s.loopStart - initial.loop.start!) < 1e-3 &&
+        Math.abs(s.loopEnd - initial.loop.end!) < 1e-3,
+    ),
+  ).toBe(true);
+
+  // Playback wraps and stays inside [A, B] past the loop's duration.
+  await page.waitForTimeout(1400);
+  const looped = await engineState(page);
+  expect(looped.playing).toBe(true);
+  expect(looped.position).toBeGreaterThanOrEqual(initial.loop.start! - 0.05);
+  expect(looped.position).toBeLessThanOrEqual(initial.loop.end! + 0.05);
+
+  // Toggling loop off keeps A & B, hides inline speed, and lets playback continue past B.
+  await page.getByRole('button', { name: 'A-B loop' }).click();
+  await expect(page.getByRole('group', { name: 'Playback speed' })).toHaveCount(0);
+  const disabled = await engineState(page);
+  expect(disabled.loop.enabled).toBe(false);
+  expect(disabled.loop.start).toBeCloseTo(initial.loop.start!, 3);
+  expect(disabled.loop.end).toBeCloseTo(initial.loop.end!, 3);
+  await expect.poll(async () => (await engineState(page)).position).toBeGreaterThan(initial.loop.end! + 0.1);
+
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.getByRole('button', { name: 'Clear loop' }).click();
+  expect((await engineState(page)).loop).toEqual({ start: null, end: null, enabled: false });
+  await expect(page.locator('.seek .loop-overlay__range')).toHaveCount(0);
+
+  // Keyboard shortcuts [, ], and L set A, set B, and toggle loop.
+  await clickSeek(page, 0.2);
+  await page.keyboard.press('BracketLeft');
+  const afterA = (await engineState(page)).loop;
+  expect(afterA.start).not.toBeNull();
+  expect(afterA.end).toBeNull();
+  await page.getByRole('button', { name: 'Forward 5 seconds' }).click();
+  await page.keyboard.press('BracketRight');
+  const afterB = (await engineState(page)).loop;
+  expect(afterB.enabled).toBe(true);
+  expect(afterB.end! - afterB.start!).toBeGreaterThan(4);
+  await page.keyboard.press('KeyL');
+  expect((await engineState(page)).loop.enabled).toBe(false);
+  await page.keyboard.press('KeyL');
+  expect((await engineState(page)).loop.enabled).toBe(true);
+});
+
+test('Bass page supports bar-snapped A–B looping, bar nudging, Shift+click range, and Song map riff looping', async ({ page }) => {
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await expect(sheet).toBeVisible();
+
+  await sheet.getByRole('button', { name: 'Bar 5', exact: true }).click();
+  await sheet.getByRole('button', { name: 'A-B loop' }).click();
+  await expect(sheet.getByRole('button', { name: 'Set loop start A' })).toHaveText('A · 5');
+  await expect(sheet.getByRole('button', { name: 'Set loop end B' })).toHaveText('B · 5');
+  await expect(sheet.locator('.songsterr__bar-loop')).toHaveCount(1);
+
+  // Loop background stays behind horizontal string lines so strings stay legible.
+  const loopBehindLines = await sheet.locator('svg.songsterr__system:has(.songsterr__bar-loop)').evaluate((sys) => {
+    const bg = sys.querySelector('.songsterr__bar-loop')!;
+    const lines = [...sys.querySelectorAll('.notation__line')];
+    return lines.length > 0 && lines.every((line) => !!(bg.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  expect(loopBehindLines).toBe(true);
+
+  await sheet.getByRole('button', { name: 'Later end bar' }).click();
+  await expect(sheet.getByRole('button', { name: 'Set loop end B' })).toHaveText('B · 6');
+  await expect(sheet.locator('.songsterr__bar-loop')).toHaveCount(2);
+
+  await sheet.getByRole('button', { name: 'Bar 8', exact: true }).click({ modifiers: ['Shift'] });
+  await expect(sheet.getByRole('button', { name: 'Set loop start A' })).toHaveText('A · 5');
+  await expect(sheet.getByRole('button', { name: 'Set loop end B' })).toHaveText('B · 8');
+  await expect(sheet.locator('.songsterr__bar-loop')).toHaveCount(4);
+
+  // One-tap Song map loop button jumps to the riff and loops it cleanly.
+  const mapRow = sheet.locator('.drum-map__row').nth(1);
+  const barsText = (await mapRow.locator('.drum-map__bars').textContent())!;
+  const firstBar = Number(barsText.split('–')[0]);
+  const mapLoopBtn = mapRow.locator('.drum-map__loop');
+  await mapLoopBtn.click();
+  await expect(mapLoopBtn).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.locator('.chord-now__name')).toHaveText(`Bar ${firstBar}`);
+  await expect(sheet.locator('.mini-player .loop-overlay__range')).toBeVisible();
+
+  const mapState = await engineState(page);
+  expect(mapState.loop.enabled).toBe(true);
+
+  // Returning to mixer preserves the loop and highlights looped bars on the Bass strip.
+  await sheet.getByRole('button', { name: 'Back to mixer' }).click();
+  await expect(page.locator('.bass')).toBeVisible();
+  expect(await page.locator('.bass__chip--loop').count()).toBeGreaterThan(0);
+});
+
+test('Bass coach listens to live bass input, grades notes on the tab, and offers one-click corrections', async ({ page }) => {
+  await page.addInitScript(() => {
+    let ctx: AudioContext | null = null;
+    let osc: OscillatorNode | null = null;
+    let gain: GainNode | null = null;
+    let dest: MediaStreamAudioDestinationNode | null = null;
+    let freq = 41.2034; // E1
+    let gainVal = 0.45;
+    let stoppedTracks = 0;
+
+    (window as unknown as { __mockBass?: unknown }).__mockBass = {
+      setFreq(hz: number) {
+        freq = hz;
+        if (osc && ctx) osc.frequency.setValueAtTime(hz, ctx.currentTime);
+      },
+      setGain(g: number) {
+        gainVal = g;
+        if (gain && ctx) gain.gain.setValueAtTime(g, ctx.currentTime);
+      },
+      getStoppedTracks: () => stoppedTracks,
+    };
+
+    const mediaDevices = {
+      getUserMedia: async () => {
+        if (!ctx) {
+          ctx = new AudioContext();
+          osc = ctx.createOscillator();
+          gain = ctx.createGain();
+          dest = ctx.createMediaStreamDestination();
+          osc.type = 'sawtooth';
+          osc.frequency.value = freq;
+          gain.gain.value = gainVal;
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start();
+        }
+        await ctx.resume();
+        const stream = dest!.stream.clone();
+        for (const tr of stream.getTracks()) {
+          const origStop = tr.stop.bind(tr);
+          tr.stop = () => {
+            stoppedTracks += 1;
+            origStop();
+          };
+        }
+        return stream;
+      },
+      enumerateDevices: async () => [
+        { deviceId: 'mock-di', kind: 'audioinput', label: 'Mock Bass DI', groupId: 'g1', toJSON: () => ({}) },
+        { deviceId: 'mock-mic', kind: 'audioinput', label: 'Mock Mic', groupId: 'g2', toJSON: () => ({}) },
+      ],
+    };
+    Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices, configurable: true });
+  });
+
+  await openSong(page);
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+
+  // Locate a bar with at least 2 bass notes so playback hits & misses can be tested reliably.
+  const targetBar = await page.evaluate((slug) => {
+    const key = Object.keys(localStorage).find((k) => k.startsWith('mosaic:bass:') && k.endsWith(`:${slug}`))!;
+    const data = JSON.parse(localStorage.getItem(key)!) as {
+      bars: { start: number; end: number; notes: { step: number; midi: number }[] }[];
+    };
+    const idx = data.bars.findIndex((b) => b.notes.length >= 2);
+    return { idx, midi: data.bars[idx].notes[0].midi };
+  }, SONG_SLUG);
+
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await sheet.getByRole('button', { name: `Bar ${targetBar.idx + 1}`, exact: true }).click({ position: { x: 10, y: 20 } });
+
+  const listenBtn = sheet.getByRole('button', { name: 'Listen to my bass' });
+  await listenBtn.click();
+  await expect(listenBtn).toHaveAttribute('aria-pressed', 'true');
+  const coach = sheet.getByRole('region', { name: 'Bass coach' });
+  await expect(coach).toBeVisible();
+
+  // Live tuner detects E1, then A1.
+  await expect(coach.locator('.bass-coach__you strong')).toHaveText('E1');
+  await page.evaluate(() => (window as unknown as { __mockBass: { setFreq(hz: number): void } }).__mockBass.setFreq(55));
+  await expect(coach.locator('.bass-coach__you strong')).toHaveText('A1');
+
+  // Mute song bass button toggles the bass stem mute cleanly.
+  await coach.getByRole('button', { name: 'Mute song bass' }).click();
+  await expect(coach.getByRole('button', { name: 'Song bass muted' })).toHaveAttribute('aria-pressed', 'true');
+  const bassStem = (await engineState(page)).stems.find((s) => /bass/i.test(s.name))!;
+  expect(bassStem.muted).toBe(true);
+
+  // Play the exact target pitch for the bar's first note -> graded hit, then silence -> missed note & loop tip.
+  await page.evaluate((midi) => {
+    const hz = 440 * Math.pow(2, (midi - 69) / 12);
+    (window as unknown as { __mockBass: { setFreq(h: number): void } }).__mockBass.setFreq(hz);
+  }, targetBar.midi);
+  await sheet.locator('.mini-player__play').click();
+  await expect(sheet.locator('.bass-tab__fret--hit').first()).toBeVisible({ timeout: 5000 });
+
+  await page.evaluate(() => (window as unknown as { __mockBass: { setGain(g: number): void } }).__mockBass.setGain(0));
+  await expect(sheet.locator('.bass-tab__fret--miss').first()).toBeVisible({ timeout: 5000 });
+  const loopTipBtn = coach.getByRole('button', { name: /^Loop bar \d+$/ });
+  await expect(loopTipBtn).toBeVisible();
+  await loopTipBtn.click();
+  expect((await engineState(page)).loop.enabled).toBe(true);
+
+  // Stopping Listen closes the coach panel and stops the MediaStream tracks.
+  await listenBtn.click();
+  await expect(coach).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { __mockBass: { getStoppedTracks(): number } }).__mockBass.getStoppedTracks()),
+  ).toBeGreaterThan(0);
+});
+
+test('Bass coach reports denied microphone permission gracefully', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: async () => {
+          throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        },
+      },
+      configurable: true,
+    });
+  });
+
+  await openSong(page);
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await sheet.getByRole('button', { name: 'Listen to my bass' }).click();
+
+  await expect(sheet.locator('.bass-coach--error')).toContainText('Microphone permission denied');
+  expect(errors).toEqual([]);
+});
+
+test('Bass page boosts the bass stem automatically and exposes inline speed control', async ({ page }) => {
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  const mixerState = await engineState(page);
+  const bassIdx = mixerState.stems.findIndex((s) => /bass/i.test(s.name));
+  expect(bassIdx).toBeGreaterThanOrEqual(0);
+  expect(mixerState.bassBoost).toBe(false);
+  expect((await syncReport(page)).gains.every((g) => Math.abs(g - 1) < 1e-3)).toBe(true);
+
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await expect(sheet).toBeVisible();
+
+  // Entering Bass tab automatically enables bass boost without overwriting stem slider volumes.
+  expect((await engineState(page)).bassBoost).toBe(true);
+  const mix = sheet.getByRole('group', { name: 'Instruments to play' });
+  const boostBtn = mix.getByRole('button', { name: 'Bass boost' });
+  await expect(boostBtn).toHaveAttribute('aria-pressed', 'true');
+  let gains = (await syncReport(page)).gains;
+  expect(gains[bassIdx]).toBeCloseTo(1.75, 2);
+  gains.forEach((g, idx) => {
+    if (idx !== bassIdx) expect(g).toBeCloseTo(0.72, 2);
+  });
+
+  // Inline speed control is available immediately on Bass page even without an active loop.
+  const speedGroup = sheet.getByRole('group', { name: 'Playback speed' });
+  await expect(speedGroup).toBeVisible();
+  await speedGroup.getByRole('button', { name: 'Slower' }).click();
+  await speedGroup.getByRole('button', { name: 'Slower' }).click();
+  expect((await engineState(page)).speed).toBe(0.9);
+  await expect(sheet.locator('.chord-meta')).toContainText('90%');
+  await speedGroup.getByRole('button', { name: 'Faster' }).click();
+  expect((await engineState(page)).speed).toBe(0.95);
+  await speedGroup.getByRole('button', { name: /Reset speed/ }).click();
+  expect((await engineState(page)).speed).toBe(1);
+
+  // Muting the song's bass restores full backing-band gain so the player isn't ducked while playing along.
+  const stemsBtn = mix.getByRole('button', { name: /^Stems/ });
+  await stemsBtn.click();
+  await mix.getByRole('button', { name: 'Bass', exact: true }).click();
+  gains = (await syncReport(page)).gains;
+  expect(gains[bassIdx]).toBe(0);
+  gains.forEach((g, idx) => {
+    if (idx !== bassIdx) expect(g).toBeCloseTo(1, 2);
+  });
+  await mix.getByRole('button', { name: 'Bass', exact: true }).click();
+  gains = (await syncReport(page)).gains;
+  expect(gains[bassIdx]).toBeCloseTo(1.75, 2);
+  await stemsBtn.click();
+
+  // Bass boost toggle turns boost off and on.
+  await boostBtn.click();
+  await expect(boostBtn).toHaveAttribute('aria-pressed', 'false');
+  expect((await engineState(page)).bassBoost).toBe(false);
+  expect((await syncReport(page)).gains.every((g) => Math.abs(g - 1) < 1e-3)).toBe(true);
+  await boostBtn.click();
+  await expect(boostBtn).toHaveAttribute('aria-pressed', 'true');
+  expect((await syncReport(page)).gains[bassIdx]).toBeCloseTo(1.75, 2);
+
+  // Leaving Bass tab automatically restores normal mix gain.
+  await sheet.getByRole('button', { name: 'Back to mixer' }).click();
+  expect((await engineState(page)).bassBoost).toBe(false);
+  expect((await syncReport(page)).gains.every((g) => Math.abs(g - 1) < 1e-3)).toBe(true);
+});
+
+test('Bass page dock and loop/speed bar stay compact, aligned, and within bounds on mobile viewports', async ({ page }) => {
+  await expect.poll(() => page.locator('.bass__chip').count(), { timeout: 45_000 }).toBeGreaterThan(10);
+  await page.getByRole('button', { name: /^Bass tab/ }).click();
+  const sheet = page.getByRole('main', { name: 'Bass tab' });
+  await expect(sheet).toBeVisible();
+
+  // Helper to inspect horizontal bounds, single/multi-row alignment, dropdown state, and >= 44px touch targets.
+  const inspectDock = () =>
+    sheet.evaluate((root) => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const body = root.querySelector('.bass-page__body')!.getBoundingClientRect();
+      const mix = root.querySelector('.bass-mix')!;
+      const mixChildren = [...mix.querySelectorAll(':scope > .bass-mix__btn, :scope > .bass-mix__dropdown > .bass-mix__trigger')]
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            label: el.textContent?.trim() || '',
+            visible: getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0,
+            y: r.y,
+            left: r.left,
+            right: r.right,
+            height: r.height,
+          };
+        })
+        .filter((item) => item.visible);
+      const triggerEl = mix.querySelector('.bass-mix__trigger')!;
+      const triggerRect = triggerEl.getBoundingClientRect();
+      const menuEl = mix.querySelector('.bass-mix__menu')!;
+      const menuOpen = getComputedStyle(menuEl).display !== 'none';
+      const menuRect = menuEl.getBoundingClientRect();
+      const loopA = root.querySelector('.loop-bar__a')!.getBoundingClientRect();
+      const loopB = root.querySelector('.loop-bar__b')!.getBoundingClientRect();
+      const toggle = root.querySelector('.loop-bar__toggle')!.getBoundingClientRect();
+      const clearEl = root.querySelector('.loop-bar__clear');
+      const clear = clearEl ? clearEl.getBoundingClientRect() : null;
+      const speed = root.querySelector('.loop-bar__speed')!.getBoundingClientRect();
+      const buttons = [...root.querySelectorAll('.loop-bar button')].map((b) => {
+        const r = b.getBoundingClientRect();
+        return {
+          label: b.getAttribute('aria-label') || b.textContent?.trim() || '',
+          width: r.width,
+          height: r.height,
+          left: r.left,
+          right: r.right,
+        };
+      });
+      return {
+        vw,
+        vh,
+        docScrollWidth: document.documentElement.scrollWidth,
+        bodyHeight: body.height,
+        mixScrollWidth: mix.scrollWidth,
+        mixClientWidth: mix.clientWidth,
+        mixRowItems: mixChildren,
+        triggerVisible: getComputedStyle(triggerEl).display !== 'none' && triggerRect.width > 0,
+        menuOpen,
+        menuRect: { top: menuRect.top, left: menuRect.left, right: menuRect.right, bottom: menuRect.bottom },
+        loopA: { x: loopA.x, y: loopA.y, width: loopA.width, height: loopA.height, right: loopA.right },
+        loopB: { x: loopB.x, y: loopB.y, width: loopB.width, height: loopB.height, right: loopB.right },
+        toggle: { x: toggle.x, y: toggle.y, width: toggle.width, height: toggle.height, right: toggle.right },
+        clear: clear ? { x: clear.x, y: clear.y, width: clear.width, height: clear.height, right: clear.right } : null,
+        speed: { x: speed.x, y: speed.y, width: speed.width, height: speed.height, right: speed.right },
+        buttons,
+      };
+    });
+
+  const mix = sheet.getByRole('group', { name: 'Instruments to play' });
+  const stemsTrigger = mix.getByRole('button', { name: /^Stems/ });
+
+  // 1. Mobile (393x826) & narrow mobile (360x740): top mix row fits without overflow, stems move into a dropdown, and loop/speed fit on ONE row.
+  for (const vp of [
+    { width: 393, height: 826 },
+    { width: 360, height: 740 },
+  ]) {
+    await page.setViewportSize(vp);
+    await expect.poll(async () => (await inspectDock()).vw).toBe(vp.width);
+    const before = await inspectDock();
+    expect(before.docScrollWidth).toBeLessThanOrEqual(vp.width);
+    expect(before.mixScrollWidth).toBeLessThanOrEqual(before.mixClientWidth + 1);
+    expect(before.triggerVisible).toBe(true);
+    expect(before.mixRowItems.map((m) => m.label)).toEqual(['Bass only', 'Bass boost', 'Stems · All']);
+    for (const item of before.mixRowItems) {
+      expect(Math.abs(item.y - before.mixRowItems[0].y)).toBeLessThanOrEqual(2);
+      expect(item.left).toBeGreaterThanOrEqual(0);
+      expect(item.right).toBeLessThanOrEqual(vp.width + 0.5);
+      expect(item.height).toBeGreaterThanOrEqual(43.5);
+    }
+    await expect(mix.getByRole('button', { name: 'All', exact: true })).toBeHidden();
+    await expect(mix.getByRole('button', { name: 'Drums' })).toBeHidden();
+
+    // Open the stems dropdown -> upward popover fits inside viewport, stays open across multi-stem toggles, closes cleanly on Escape.
+    await stemsTrigger.click();
+    await expect(stemsTrigger).toHaveAttribute('aria-expanded', 'true');
+    const opened = await inspectDock();
+    expect(opened.menuOpen).toBe(true);
+    expect(opened.menuRect.top).toBeGreaterThanOrEqual(0);
+    expect(opened.menuRect.left).toBeGreaterThanOrEqual(0);
+    expect(opened.menuRect.right).toBeLessThanOrEqual(vp.width + 0.5);
+    await expect(mix.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+    await expect(mix.getByRole('button', { name: 'Drums' })).toBeVisible();
+    expect((await mix.getByRole('button', { name: 'Drums' }).boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+
+    await mix.getByRole('button', { name: 'Drums' }).click();
+    await expect(stemsTrigger).toHaveText('Stems · 5/6');
+    await expect(mix.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+    await mix.getByRole('button', { name: 'All', exact: true }).click();
+    await expect(stemsTrigger).toHaveText('Stems · All');
+
+    await page.keyboard.press('Escape');
+    await expect(stemsTrigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(sheet).toBeVisible();
+    await expect(mix.getByRole('button', { name: 'Drums' })).toBeHidden();
+
+    expect(Math.abs(before.loopA.y - before.loopB.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(before.loopA.y - before.toggle.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(before.loopA.y - before.speed.y)).toBeLessThanOrEqual(2);
+    for (const btn of before.buttons) {
+      expect(btn.left).toBeGreaterThanOrEqual(0);
+      expect(btn.right).toBeLessThanOrEqual(vp.width + 0.5);
+      expect(btn.height).toBeGreaterThanOrEqual(43.5);
+    }
+  }
+
+  // 2. Activate a bar-snapped loop -> Row 1 has equal A & B steppers, Row 2 has Loop · Clear · Speed, >= 44px targets.
+  await sheet.getByRole('button', { name: 'Bar 5', exact: true }).click();
+  await sheet.getByRole('button', { name: 'A-B loop' }).click();
+  await sheet.getByRole('button', { name: 'Later end bar' }).click();
+
+  for (const vp of [
+    { width: 393, height: 826 },
+    { width: 360, height: 740 },
+  ]) {
+    await page.setViewportSize(vp);
+    await expect.poll(async () => (await inspectDock()).vw).toBe(vp.width);
+    const looped = await inspectDock();
+    expect(looped.docScrollWidth).toBeLessThanOrEqual(vp.width);
+
+    // Row 1: A and B share y and have equal width (within 2px).
+    expect(Math.abs(looped.loopA.y - looped.loopB.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(looped.loopA.width - looped.loopB.width)).toBeLessThanOrEqual(2);
+    expect(looped.loopA.x).toBeGreaterThanOrEqual(0);
+    expect(looped.loopB.right).toBeLessThanOrEqual(vp.width + 0.5);
+
+    // Row 2: Loop toggle, Clear, and Speed sit together on the row directly below Row 1.
+    expect(looped.clear).not.toBeNull();
+    expect(looped.toggle.y).toBeGreaterThanOrEqual(looped.loopA.y + looped.loopA.height - 1);
+    expect(Math.abs(looped.toggle.y - looped.clear!.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(looped.toggle.y - looped.speed.y)).toBeLessThanOrEqual(2);
+    expect(looped.speed.right).toBeLessThanOrEqual(vp.width + 0.5);
+
+    for (const btn of looped.buttons) {
+      expect(btn.left).toBeGreaterThanOrEqual(0);
+      expect(btn.right).toBeLessThanOrEqual(vp.width + 0.5);
+      expect(btn.width).toBeGreaterThanOrEqual(43.5);
+      expect(btn.height).toBeGreaterThanOrEqual(43.5);
+    }
+
+    if (vp.width === 393) {
+      expect(looped.bodyHeight).toBeGreaterThanOrEqual(220);
+    }
+  }
+
+  // 3. Desktop (1440x900): dropdown trigger hides, All + stems show inline, and all 5 loop/speed controls sit on one row.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(async () => (await inspectDock()).vw).toBe(1440);
+  const desktop = await inspectDock();
+  expect(desktop.docScrollWidth).toBeLessThanOrEqual(1440);
+  expect(desktop.triggerVisible).toBe(false);
+  await expect(mix.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+  await expect(mix.getByRole('button', { name: 'Drums' })).toBeVisible();
+  expect(Math.abs(desktop.loopA.y - desktop.loopB.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(desktop.loopA.y - desktop.toggle.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(desktop.loopA.y - desktop.clear!.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(desktop.loopA.y - desktop.speed.y)).toBeLessThanOrEqual(2);
 });

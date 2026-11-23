@@ -62,12 +62,18 @@ export function firstBeatAtOrAfter(beats: number[], t: number): number {
   return lo;
 }
 
+export interface LoopBounds {
+  start: number;
+  end: number;
+}
+
 /** Click track scheduled on the AudioContext clock, aligned to track time. Bypasses pitch shifting. */
 export class Metronome {
   private out: GainNode;
   private sound: AudioBuffer;
   private settings: MetronomeSettings = { enabled: false, bpm: 120, offset: 0, volume: 0.7, beats: null, downbeat: 0 };
   private nextBeat = 0;
+  private loopCycles = 0;
   private active = false;
 
   constructor(
@@ -93,13 +99,17 @@ export class Metronome {
     return offset + (k * 60) / bpm;
   }
 
-
-  /** Call when playback (re)starts at `pos` seconds of track time. */
-  reset(pos: number) {
+  private beatIndexAt(pos: number): number {
     const { beats, offset, bpm } = this.settings;
-    this.nextBeat = beats
+    return beats
       ? firstBeatAtOrAfter(beats, pos - offset - 1e-6)
       : Math.ceil((pos - offset) / (60 / bpm) - 1e-6);
+  }
+
+  /** Call when playback (re)starts at `pos` seconds of track time. */
+  reset(pos: number, loopCycles = 0) {
+    this.nextBeat = this.beatIndexAt(pos);
+    this.loopCycles = loopCycles;
     this.active = true;
   }
 
@@ -110,12 +120,31 @@ export class Metronome {
   /**
    * Schedule clicks that fall within the look-ahead window.
    * `toCtxTime` maps track time → AudioContext time; `limit` = track time to stop at (song end).
+   * When `loop` is active, track times wrap at `loop.end` back to `loop.start` and advance `loopCycles`.
    */
-  schedule(toCtxTime: (trackTime: number) => number, limit: number) {
+  schedule(toCtxTime: (trackTime: number) => number, limit: number, loop: LoopBounds | null = null) {
     if (!this.active || !this.settings.enabled) return;
     const now = this.ctx.currentTime;
+    const loopLen = loop ? loop.end - loop.start : 0;
     for (;;) {
       const beatTime = this.beatTime(this.nextBeat);
+      if (loop && loopLen > 0) {
+        // Wrap slightly before loop.end so a beat right on a bar boundary doesn't fire twice per wrap.
+        if (beatTime === null || beatTime >= loop.end - 1e-4) {
+          const startBeat = this.beatIndexAt(loop.start);
+          const first = this.beatTime(startBeat);
+          if (first === null || first >= loop.end - 1e-4) return;
+          this.loopCycles += 1;
+          this.nextBeat = startBeat;
+          continue;
+        }
+        const unwrapped = beatTime + this.loopCycles * loopLen;
+        const at = toCtxTime(unwrapped);
+        if (at > now + LOOKAHEAD) return;
+        if (at >= now - 0.02) this.click(Math.max(now, at));
+        this.nextBeat += 1;
+        continue;
+      }
       if (beatTime === null || beatTime >= limit) return;
       const at = toCtxTime(beatTime);
       if (at > now + LOOKAHEAD) return;

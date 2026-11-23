@@ -11,6 +11,7 @@ export const ANALYSERS = {
   beats: 'src/audio/bpm.ts',
   chords: 'src/audio/chordDetect.ts',
   drums: 'src/audio/drumDetect.ts',
+  bass: 'src/audio/bassDetect.ts',
 } as const;
 
 export type AnalyserKind = keyof typeof ANALYSERS;
